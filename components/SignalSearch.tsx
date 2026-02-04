@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Search } from 'lucide-react';
 
@@ -18,7 +19,7 @@ export const SignalSearch: React.FC<SignalSearchProps> = ({ searchTerm, setSearc
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="ENTER_SIGNAL_QUERY (e.g. 'Ransomware', 'Cloud', 'SQL')"
+          placeholder="SEARCH DATASET // TAGS: [MALWARE, CLOUD] // OBJECTIVES: [1.2, 2.3]"
           className="w-full bg-transparent border-b border-cyber-slate text-cyber-emerald font-mono focus:outline-none focus:border-cyber-cyan placeholder-gray-600 uppercase"
           autoFocus
         />
