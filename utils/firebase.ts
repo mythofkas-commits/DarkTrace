@@ -3,15 +3,14 @@ import { getAnalytics, isSupported } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Updated configuration from user
 const firebaseConfig = {
-  apiKey: "AIzaSyCuFFfPZ36TOQF1HrBF6RyZPaxRGnASXjY",
-  authDomain: "darktrace-91535.firebaseapp.com",
-  projectId: "darktrace-91535",
-  storageBucket: "darktrace-91535.firebasestorage.app",
-  messagingSenderId: "170403701401",
-  appId: "1:170403701401:web:d049fafbd09a9877b2ce08",
-  measurementId: "G-7YXY6YERB3"
+  apiKey: "AIzaSyCHoHtgyR9SNBax5NnTpPyUhIw3wwgcdn8",
+  authDomain: "aaaaa-ca9a6.firebaseapp.com",
+  projectId: "aaaaa-ca9a6",
+  storageBucket: "aaaaa-ca9a6.firebasestorage.app",
+  messagingSenderId: "67655718873",
+  appId: "1:67655718873:web:4915df3a73f52d787f2bc8"
 };
 
 // Initialize Firebase
