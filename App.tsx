@@ -7,6 +7,9 @@ import { IntelHUD } from './components/IntelHUD';
 import { SignalSearch } from './components/SignalSearch';
 import { scenarios } from './data/dataset';
 import { saveGame, loadGame } from './utils/storage';
+import { auth, db } from './utils/firebase';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { GameState, Scenario, DOMAINS, Domain } from './types';
 import { AlertTriangle, CheckCircle, XCircle, Play, ChevronRight, BookOpen, Target, FileText, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,6 +21,7 @@ const App = () => {
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [user, setUser] = useState<any>(null);
 
   // Filter available scenarios based on cleared list, active domain, AND search term
   const availableScenarios = useMemo(() => {
@@ -42,9 +46,67 @@ const App = () => {
     return scenarios.find(s => s.id === gameState.currentScenarioId);
   }, [gameState.currentScenarioId]);
 
+  // Local Save
   useEffect(() => {
     saveGame(gameState);
   }, [gameState]);
+
+  // Cloud Connection
+  useEffect(() => {
+    const initCloud = async () => {
+      try {
+        const unsubscribe = onAuthStateChanged(auth, async (u) => {
+          if (u) {
+            setUser(u);
+            addLog(`[CLOUD] Uplink established :: UID ${u.uid.slice(0,6)}...`);
+            
+            // Attempt to load cloud save
+            try {
+              const userDoc = await getDoc(doc(db, 'agents', u.uid));
+              if (userDoc.exists()) {
+                const cloudData = userDoc.data() as GameState;
+                // Basic conflict resolution: If cloud has higher level/xp, it wins.
+                setGameState(prev => {
+                  if (cloudData.xp > prev.xp) {
+                    addLog('[CLOUD] Syncing remote profile...');
+                    return { ...cloudData, currentScenarioId: prev.currentScenarioId || cloudData.currentScenarioId };
+                  }
+                  return prev;
+                });
+              }
+            } catch (err) {
+               console.error("Cloud fetch error", err);
+            }
+          } else {
+             await signInAnonymously(auth);
+          }
+        });
+        return unsubscribe;
+      } catch (err) {
+        addLog('[ERROR] Cloud uplink failed.');
+      }
+    };
+    initCloud();
+  }, []);
+
+  // Cloud Save
+  useEffect(() => {
+    if (user && gameState.xp > 0) {
+      const saveCloud = async () => {
+        try {
+          await setDoc(doc(db, 'agents', user.uid), {
+            ...gameState,
+            lastActive: new Date().toISOString()
+          }, { merge: true });
+        } catch (e) {
+          console.error("Save failed", e);
+        }
+      };
+      // Debounce saves
+      const debounce = setTimeout(saveCloud, 3000);
+      return () => clearTimeout(debounce);
+    }
+  }, [gameState, user]);
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev.slice(-49), msg]);

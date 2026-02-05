@@ -3,7 +3,6 @@ import { Scenario } from '../types';
 
 export const scenarios: Scenario[] = [
   // --- PRACTICE EXAM A EXTRACTS ---
-  
   {
     id: 'EXAM-A-Q06',
     domain: 'Governance, Risk, Compliance',
@@ -326,5 +325,291 @@ export const scenarios: Scenario[] = [
     threatLevel: 'low',
     logs: ['DB_EXPORT: Running sanitization script', 'DATA_PRIVACY: 50,000 records anonymized for marketing share'],
     refs: [{ source: 'Practice Exams', section: 'Exam A', page: 132 }]
+  },
+  // --- INJECTED INTELLIGENCE (BATCH B) ---
+  {
+    id: 'EXAM-B-Q04',
+    domain: 'Security Architecture',
+    question: 'An organization is migrating to a cloud environment where they will manage the operating systems and applications, but the provider manages the hardware and network. Which service model are they using?',
+    options: ['SaaS', 'IaaS', 'PaaS', 'FaaS'],
+    correctIndex: 1,
+    explanation: 'In Infrastructure as a Service (IaaS), the customer manages the OS, apps, and data, while the provider manages the physical hardware, virtualization, and network.',
+    rationales: [
+      'INCORRECT: In SaaS, the provider manages everything including the application (e.g., Salesforce).',
+      'CORRECT: IaaS gives the customer control starting from the Operating System layer.',
+      'INCORRECT: In PaaS, the provider manages the OS and runtime, the customer just deploys code.',
+      'INCORRECT: FaaS (Function as a Service) is serverless; the customer only manages individual functions.'
+    ],
+    objectiveCodes: ['3.1'],
+    tags: ['Cloud', 'IaaS', 'Architecture'],
+    threatLevel: 'low',
+    logs: ['CLOUD_API: Provisioning EC2 Instance type t3.large', 'USER_ACTION: Uploading Custom AMI'],
+    refs: [{ source: 'Practice Exams', section: 'Exam B', page: 12 }]
+  },
+  {
+    id: 'EXAM-B-Q11',
+    domain: 'Security Operations',
+    question: 'A security analyst needs to ensure that deleted files on a hard drive cannot be recovered by third-party forensics tools before the drive is donated to charity. Which method should be used?',
+    options: ['Standard formatting', 'Degaussing', 'Pulverizing', 'Wiping'],
+    correctIndex: 3,
+    explanation: 'Wiping (or sanitization) involves overwriting the media with random data multiple times to prevent recovery, while keeping the drive functional for reuse.',
+    rationales: [
+      'INCORRECT: Formatting removes pointers but data remains on the disk.',
+      'INCORRECT: Degaussing destroys the drive magnetically, making it unusable (cannot be donated).',
+      'INCORRECT: Pulverizing physically destroys the drive (cannot be donated).',
+      'CORRECT: Wiping cleans the data while preserving the hardware for donation.'
+    ],
+    objectiveCodes: ['5.4'],
+    tags: ['Data Destruction', 'Sanitization', 'Hardware'],
+    threatLevel: 'low',
+    logs: ['DISK_UTIL: Initiating DoD 5220.22-M 3-pass overwrite', 'STATUS: Sector 0-999999 overwritten'],
+    refs: [{ source: 'Practice Exams', section: 'Exam B', page: 19 }]
+  },
+  {
+    id: 'EXAM-B-Q15',
+    domain: 'Threats, Vulnerabilities, Mitigations',
+    question: 'A user receives an SMS message claiming their bank account is locked and asking them to click a link to verify their identity. What type of attack is this?',
+    options: ['Vishing', 'Smishing', 'Phishing', 'Spear phishing'],
+    correctIndex: 1,
+    explanation: 'Smishing is Phishing conducted via SMS (Short Message Service).',
+    rationales: [
+      'INCORRECT: Vishing involves voice calls.',
+      'CORRECT: Smishing targets users via text messages.',
+      'INCORRECT: Phishing is the general term, but Smishing is the specific correct answer for SMS.',
+      'INCORRECT: Spear phishing targets a specific individual or organization.'
+    ],
+    objectiveCodes: ['2.1'],
+    tags: ['Social Engineering', 'Mobile', 'Attacks'],
+    threatLevel: 'medium',
+    logs: ['SMS_GATEWAY: Malicious link detected in inbound text', 'URL_FILTER: Blocked domain "bank-verify-secure.com"'],
+    refs: [{ source: 'Practice Exams', section: 'Exam B', page: 22 }]
+  },
+  {
+    id: 'EXAM-B-Q22',
+    domain: 'Security Architecture',
+    question: 'Which of the following concepts describes a network architecture where no device or user is trusted by default, regardless of whether they are inside or outside the network perimeter?',
+    options: ['Defense in Depth', 'Zero Trust', 'Air Gap', 'VPN'],
+    correctIndex: 1,
+    explanation: 'Zero Trust architecture assumes that the network is already compromised and requires continuous verification of every user, device, and application request.',
+    rationales: [
+      'INCORRECT: Defense in Depth uses layers, but often still implies a trusted internal zone.',
+      'CORRECT: Zero Trust eliminates the concept of a trusted internal network.',
+      'INCORRECT: Air Gap physically separates networks, which is a specific control, not the Zero Trust philosophy.',
+      'INCORRECT: VPN provides a tunnel but often grants broad access once connected.'
+    ],
+    objectiveCodes: ['3.2'],
+    tags: ['Zero Trust', 'Architecture', 'Modern Security'],
+    threatLevel: 'high',
+    logs: ['ZTNA_GATEWAY: User identity verified but device health check failed', 'ACCESS_DENIED: Policy "No-Trust" enforced'],
+    refs: [{ source: 'Practice Exams', section: 'Exam B', page: 28 }]
+  },
+  {
+    id: 'EXAM-B-Q29',
+    domain: 'Security Operations',
+    question: 'During a forensic investigation, which of the following represents the correct order of volatility (from most volatile to least)?',
+    options: ['Disk, RAM, CPU Cache, Archival Media', 'CPU Cache, RAM, Swap/Page File, Hard Drive', 'RAM, CPU Cache, Hard Drive, Swap/Page File', 'Hard Drive, RAM, CPU Cache, Swap/Page File'],
+    correctIndex: 1,
+    explanation: 'The order of volatility dictates collecting data that disappears fastest first: CPU Registers/Cache -> RAM -> Swap/Page File -> Hard Drive -> Archival Media.',
+    rationales: [
+      'INCORRECT: Disk is less volatile than RAM.',
+      'CORRECT: CPU Cache vanishes instantly without power; RAM vanishes quickly; Swap persists slightly longer; HDD persists without power.',
+      'INCORRECT: CPU Cache is more volatile than RAM.',
+      'INCORRECT: Hard Drive is the least volatile of the primary components.'
+    ],
+    objectiveCodes: ['4.5'],
+    tags: ['Forensics', 'Incident Response'],
+    threatLevel: 'medium',
+    logs: ['IR_PROCEDURE: Capturing CPU registers...', 'IR_PROCEDURE: Dumping RAM to evidence drive'],
+    refs: [{ source: 'Practice Exams', section: 'Exam B', page: 33 }]
+  },
+  {
+    id: 'EXAM-C-Q03',
+    domain: 'Governance, Risk, Compliance',
+    question: 'A European customer requests that their personal data be completely removed from a company\'s systems. Which regulation guarantees this right?',
+    options: ['PCI DSS', 'HIPAA', 'GDPR', 'SOX'],
+    correctIndex: 2,
+    explanation: 'GDPR (General Data Protection Regulation) includes the "Right to Erasure" (or Right to be Forgotten), allowing data subjects to demand deletion of their data.',
+    rationales: [
+      'INCORRECT: PCI DSS governs credit card security.',
+      'INCORRECT: HIPAA governs US healthcare data.',
+      'CORRECT: GDPR Article 17 defines the Right to Erasure.',
+      'INCORRECT: SOX governs US corporate financial reporting.'
+    ],
+    objectiveCodes: ['5.3'],
+    tags: ['Compliance', 'GDPR', 'Privacy'],
+    threatLevel: 'low',
+    logs: ['COMPLIANCE_TICKET: Article 17 Request received', 'DB_ADMIN: Executing delete_user_pii script'],
+    refs: [{ source: 'Practice Exams', section: 'Exam C', page: 8 }]
+  },
+  {
+    id: 'EXAM-C-Q12',
+    domain: 'Security Architecture',
+    question: 'Which tool is primarily used to monitor and enforce security policies for cloud-based applications (SaaS), such as detecting sensitive data uploads to unauthorized personal cloud storage?',
+    options: ['WAF', 'NGFW', 'CASB', 'HIDS'],
+    correctIndex: 2,
+    explanation: 'A CASB (Cloud Access Security Broker) sits between on-prem users and cloud applications to enforce policy, visible, and data security (DLP).',
+    rationales: [
+      'INCORRECT: WAF protects web applications from inbound attacks (like SQLi).',
+      'INCORRECT: NGFW is a network firewall, though it has some app control, CASB is specific to Cloud/SaaS policy.',
+      'CORRECT: CASB is the specialized tool for Shadow IT and SaaS control.',
+      'INCORRECT: HIDS monitors a specific host, not cloud traffic.'
+    ],
+    objectiveCodes: ['3.4'],
+    tags: ['Cloud', 'CASB', 'DLP'],
+    threatLevel: 'high',
+    logs: ['CASB_ALERT: User uploading "confidential_project.pdf" to Personal Dropbox', 'ACTION: Blocked by DLP Policy'],
+    refs: [{ source: 'Practice Exams', section: 'Exam C', page: 15 }]
+  },
+  {
+    id: 'EXAM-C-Q19',
+    domain: 'Threats, Vulnerabilities, Mitigations',
+    question: 'An attacker sets up a fake Wi-Fi access point with the same SSID as the corporate network to intercept credentials. What is this attack called?',
+    options: ['Evil Twin', 'Rogue Access Point', 'Jamming', 'Bluejacking'],
+    correctIndex: 0,
+    explanation: 'An Evil Twin is a specific type of Rogue AP that mimics a legitimate network (same SSID) to trick users into connecting.',
+    rationales: [
+      'CORRECT: Evil Twin mimics the SSID to deceive users.',
+      'INCORRECT: A Rogue AP is any unauthorized AP, but "Evil Twin" specifically implies the mimicking of a legitimate network.',
+      'INCORRECT: Jamming is a DoS attack against wireless frequencies.',
+      'INCORRECT: Bluejacking is sending unsolicited messages via Bluetooth.'
+    ],
+    objectiveCodes: ['2.3'],
+    tags: ['Wireless', 'Attacks', 'WiFi'],
+    threatLevel: 'medium',
+    logs: ['WIDS_ALERT: Duplicate SSID "Corp_Guest" detected at -40dBm', 'NETWORK_OPS: Disassociating clients from BSSID AA:AA:AA:AA:AA:AA'],
+    refs: [{ source: 'Practice Exams', section: 'Exam C', page: 24 }]
+  },
+  {
+    id: 'EXAM-C-Q25',
+    domain: 'General Security Concepts',
+    question: 'Which cryptographic property ensures that a message has not been altered in transit?',
+    options: ['Confidentiality', 'Integrity', 'Availability', 'Non-repudiation'],
+    correctIndex: 1,
+    explanation: 'Integrity ensures that data remains unchanged during storage or transit, typically achieved via hashing.',
+    rationales: [
+      'INCORRECT: Confidentiality ensures data is not read by unauthorized parties (Encryption).',
+      'CORRECT: Integrity checks (hashes) verify data has not changed.',
+      'INCORRECT: Availability ensures systems are up and running.',
+      'INCORRECT: Non-repudiation prevents a sender from denying they sent the message.'
+    ],
+    objectiveCodes: ['1.2'],
+    tags: ['Cryptography', 'CIA Triad'],
+    threatLevel: 'low',
+    logs: ['HASH_CHECK: SHA-256 mismatch on downloaded file', 'ALERT: Integrity violation detected'],
+    refs: [{ source: 'Practice Exams', section: 'Exam C', page: 30 }]
+  },
+  {
+    id: 'EXAM-D-Q04',
+    domain: 'Security Architecture',
+    question: 'A server room requires high security. The door uses a smart card, but users also need to enter a PIN. What type of authentication is this?',
+    options: ['Something you know', 'Single-factor', 'Multifactor', 'Something you are'],
+    correctIndex: 2,
+    explanation: 'Multifactor Authentication (MFA) requires two or more different factors. Smart card (Something you have) + PIN (Something you know) = MFA.',
+    rationales: [
+      'INCORRECT: "Something you know" is just one part (the PIN).',
+      'INCORRECT: Single-factor would be just a PIN or just a card.',
+      'CORRECT: It combines two distinct factors (Have + Know).',
+      'INCORRECT: "Something you are" refers to biometrics.'
+    ],
+    objectiveCodes: ['3.3'],
+    tags: ['IAM', 'MFA', 'Authentication'],
+    threatLevel: 'medium',
+    logs: ['DOOR_ACCESS: Card ID 88321 presented', 'AUTH_STEP: PIN verification successful'],
+    refs: [{ source: 'Practice Exams', section: 'Exam D', page: 5 }]
+  },
+  {
+    id: 'EXAM-D-Q09',
+    domain: 'Threats, Vulnerabilities, Mitigations',
+    question: 'Which type of malware resides only in memory (RAM) and uses legitimate system tools like PowerShell to execute malicious code, avoiding disk detection?',
+    options: ['Rootkit', 'Fileless malware', 'Trojan', 'Worm'],
+    correctIndex: 1,
+    explanation: 'Fileless malware operates in memory and leverages "Living off the Land" (LotL) binaries (like PowerShell, WMI) rather than dropping executable files on the disk.',
+    rationales: [
+      'INCORRECT: Rootkits hide deep in the OS but usually exist as files/drivers.',
+      'CORRECT: Fileless malware avoids the disk to bypass traditional antivirus.',
+      'INCORRECT: Trojans are malicious programs disguised as legitimate software.',
+      'INCORRECT: Worms self-replicate across networks.'
+    ],
+    objectiveCodes: ['2.1'],
+    tags: ['Malware', 'PowerShell', 'Advanced Threats'],
+    threatLevel: 'critical',
+    logs: ['EDR_ALERT: Suspicious PowerShell execution', 'CMD_LINE: powershell.exe -nop -w hidden -c IEX(New-Object Net.WebClient)...'],
+    refs: [{ source: 'Practice Exams', section: 'Exam D', page: 14 }]
+  },
+  {
+    id: 'EXAM-D-Q18',
+    domain: 'General Security Concepts',
+    question: 'To prevent signal emanations from allowing an attacker to reconstruct video from a monitor through a wall, the organization installs copper shielding in the walls. What is this implementation called?',
+    options: ['Air gap', 'Faraday cage', 'DMZ', 'Hot aisle'],
+    correctIndex: 1,
+    explanation: 'A Faraday cage is a continuous conductive enclosure used to block electromagnetic fields (RF signals).',
+    rationales: [
+      'INCORRECT: Air gap is a network isolation technique.',
+      'CORRECT: Faraday cages block EM/RF signals (TEMPEST).',
+      'INCORRECT: DMZ is a network segment for public facing services.',
+      'INCORRECT: Hot aisle is a cooling configuration in a data center.'
+    ],
+    objectiveCodes: ['1.1'],
+    tags: ['Physical Security', 'Spycraft'],
+    threatLevel: 'low',
+    logs: ['RF_SCANNER: No signal detected inside Secure Room', 'FACILITY: SCIF construction complete'],
+    refs: [{ source: 'Practice Exams', section: 'Exam D', page: 25 }]
+  },
+  {
+    id: 'EXAM-D-Q22',
+    domain: 'Security Operations',
+    question: 'A security team uses a dedicated server to lure attackers. This server contains fake data and is monitored to study attacker behavior. What is this server called?',
+    options: ['Jump box', 'Honeypot', 'Proxy', 'Bastion host'],
+    correctIndex: 1,
+    explanation: 'A Honeypot is a decoy system designed to attract attackers to detect, deflect, or study attempts to gain unauthorized access.',
+    rationales: [
+      'INCORRECT: Jump box is for authorized admin access.',
+      'CORRECT: Honeypots are decoys.',
+      'INCORRECT: Proxy relays requests for clients.',
+      'INCORRECT: Bastion host is a hardened exposed server, but not necessarily a fake decoy.'
+    ],
+    objectiveCodes: ['4.7'],
+    tags: ['Deception', 'Active Defense'],
+    threatLevel: 'low',
+    logs: ['HONEYPOT_01: SSH login attempt from 192.168.1.55', 'ALARM: Attacker accessing fake_passwords.txt'],
+    refs: [{ source: 'Practice Exams', section: 'Exam D', page: 29 }]
+  },
+  {
+    id: 'EXAM-E-Q02',
+    domain: 'Security Architecture',
+    question: 'Which access control model grants access based on strict clearance levels (e.g., Secret, Top Secret) and object labels?',
+    options: ['DAC', 'RBAC', 'MAC', 'ABAC'],
+    correctIndex: 2,
+    explanation: 'MAC (Mandatory Access Control) uses security labels (Clearance Level) and is enforced by the OS. Users cannot change permissions.',
+    rationales: [
+      'INCORRECT: DAC (Discretionary) allows owners to set permissions (Windows NTFS).',
+      'INCORRECT: RBAC (Role Based) grants access based on job function.',
+      'CORRECT: MAC is the strictest model, used in military/government (Labels/Clearance).',
+      'INCORRECT: ABAC (Attribute Based) uses policies combining attributes (Time, Location, Role).'
+    ],
+    objectiveCodes: ['3.3'],
+    tags: ['IAM', 'Access Control', 'Military'],
+    threatLevel: 'high',
+    logs: ['KERNEL: Access denied. User clearance (SECRET) < Object classification (TOP SECRET)', 'AUDIT: MAC Policy Violation'],
+    refs: [{ source: 'Practice Exams', section: 'Exam E', page: 4 }]
+  },
+  {
+    id: 'EXAM-E-Q08',
+    domain: 'Threats, Vulnerabilities, Mitigations',
+    question: 'Which of the following describes an attack where an attacker injects malicious code into a website\'s input fields, which is then executed by other users\' browsers?',
+    options: ['SQL Injection', 'XSS', 'CSRF', 'SSRF'],
+    correctIndex: 1,
+    explanation: 'XSS (Cross-Site Scripting) involves injecting client-side scripts (usually JavaScript) into web pages viewed by other users.',
+    rationales: [
+      'INCORRECT: SQL Injection targets the database backend.',
+      'CORRECT: XSS executes in the victim\'s browser.',
+      'INCORRECT: CSRF (Cross-Site Request Forgery) tricks a user into performing an action they didn\'t intend.',
+      'INCORRECT: SSRF (Server-Side Request Forgery) tricks the server into making requests.'
+    ],
+    objectiveCodes: ['2.4'],
+    tags: ['Web Security', 'AppSec', 'OWASP'],
+    threatLevel: 'medium',
+    logs: ['WAF_LOG: Detected <script> tag in comments field', 'BROWSER: Blocked execution of inline script'],
+    refs: [{ source: 'Practice Exams', section: 'Exam E', page: 11 }]
   }
 ];
