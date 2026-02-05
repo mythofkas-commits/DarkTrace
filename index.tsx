@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
+import './utils/firebase'; // Initialize Firebase
 import { Terminal } from './components/Terminal';
 import { NetworkMap } from './components/NetworkMap';
 import { IntelHUD } from './components/IntelHUD';
@@ -7,7 +9,7 @@ import { SignalSearch } from './components/SignalSearch';
 import { scenarios } from './data/dataset';
 import { saveGame, loadGame } from './utils/storage';
 import { GameState, Scenario, DOMAINS, Domain } from './types';
-import { AlertTriangle, CheckCircle, XCircle, Play, ChevronRight, BookOpen, Target } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Play, ChevronRight, BookOpen, Target, FileText, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const App = () => {
@@ -23,10 +25,14 @@ const App = () => {
     return scenarios.filter(s => {
       const isCleared = gameState.clearedScenarios.includes(s.id);
       const matchesDomain = gameState.activeDomain === 'ALL' || s.domain === gameState.activeDomain;
+      
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch = searchTerm === '' || 
-        s.question.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.explanation.toLowerCase().includes(searchTerm.toLowerCase());
+        s.question.toLowerCase().includes(searchLower) || 
+        s.id.toLowerCase().includes(searchLower) ||
+        s.explanation.toLowerCase().includes(searchLower) ||
+        s.tags.some(t => t.toLowerCase().includes(searchLower)) ||
+        s.objectiveCodes.some(o => o.includes(searchLower));
       
       return !isCleared && matchesDomain && matchesSearch;
     });
@@ -54,7 +60,7 @@ const App = () => {
     setSelectedOption(null);
     setShowExplanation(false);
     
-    addLog(`[ALERT] Intercepting Signal: ${nextScenario.id}`);
+    addLog(`[ALERT] Intercepting Signal: ${nextScenario.id} [${nextScenario.objectiveCodes.join(', ')}]`);
     nextScenario.logs.forEach((l, i) => {
       setTimeout(() => addLog(`> ${l}`), 500 + (i * 800));
     });
@@ -96,7 +102,7 @@ const App = () => {
           level: newLevel,
         };
       });
-      setShowExplanation(true);
+      setShowExplanation(true); // Always show explanation now
     } else {
       setFeedback('incorrect');
       addLog(`[FAILURE] Countermeasure failed for ${currentScenario.id}.`);
@@ -104,6 +110,7 @@ const App = () => {
         ...prev,
         streak: 0
       }));
+      setShowExplanation(true);
     }
   };
 
@@ -200,7 +207,14 @@ const App = () => {
                             className="bg-cyber-dark/50 p-4 rounded border border-cyber-slate/30 hover:border-cyber-cyan/50 hover:bg-cyber-slate/30 cursor-pointer transition-all group"
                          >
                            <div className="flex justify-between items-center mb-1">
-                             <span className="text-cyber-cyan font-bold text-xs">{s.id}</span>
+                             <span className="text-cyber-cyan font-bold text-xs flex items-center gap-2">
+                                {s.id}
+                                {s.objectiveCodes.map(code => (
+                                   <span key={code} className="bg-cyber-slate text-gray-400 px-1 rounded text-[9px] border border-cyber-slate/50">
+                                     OBJ {code}
+                                   </span>
+                                ))}
+                             </span>
                              <span className={`text-[10px] px-2 py-0.5 rounded ${
                                s.threatLevel === 'critical' ? 'bg-cyber-rose/20 text-cyber-rose' :
                                s.threatLevel === 'high' ? 'bg-orange-500/20 text-orange-500' :
@@ -212,8 +226,12 @@ const App = () => {
                            <div className="text-gray-400 text-sm line-clamp-2 group-hover:text-white transition-colors">
                              {s.question}
                            </div>
-                           <div className="text-xs text-gray-600 mt-2 font-mono">
-                             DOMAIN: {s.domain}
+                           <div className="flex gap-2 mt-2">
+                             {s.tags.slice(0, 3).map(tag => (
+                               <span key={tag} className="text-[10px] text-gray-500 bg-cyber-black/50 px-1 rounded">
+                                 #{tag}
+                               </span>
+                             ))}
                            </div>
                          </div>
                        ))
@@ -235,10 +253,19 @@ const App = () => {
                 <div className="flex-1 p-6 flex flex-col">
                   {/* Scenario Header */}
                   <div className="flex justify-between items-start mb-6">
-                     <span className="text-xs font-bold text-cyber-rose bg-cyber-rose/10 px-2 py-1 rounded border border-cyber-rose/20">
-                       INCIDENT: {currentScenario.id}
-                     </span>
-                     <span className="text-xs text-gray-500">{currentScenario.domain}</span>
+                     <div className="flex flex-col">
+                        <div className="flex items-center gap-2 mb-1">
+                           <span className="text-xs font-bold text-cyber-rose bg-cyber-rose/10 px-2 py-1 rounded border border-cyber-rose/20">
+                             INCIDENT: {currentScenario.id}
+                           </span>
+                           {currentScenario.objectiveCodes.map(oc => (
+                             <span key={oc} className="text-[10px] font-mono text-cyber-cyan bg-cyber-cyan/10 px-1 py-0.5 rounded">
+                               OBJ {oc}
+                             </span>
+                           ))}
+                        </div>
+                        <span className="text-xs text-gray-500">{currentScenario.domain}</span>
+                     </div>
                   </div>
 
                   {/* Question */}
@@ -248,27 +275,57 @@ const App = () => {
 
                   {/* Options */}
                   <div className="space-y-3 flex-1">
-                    {currentScenario.options.map((opt, idx) => (
-                      <button
-                        key={idx}
-                        disabled={feedback !== null}
-                        onClick={() => setSelectedOption(idx)}
-                        className={`w-full text-left p-4 rounded border transition-all duration-200 
-                          ${selectedOption === idx 
-                            ? 'bg-cyber-slate border-cyber-cyan text-cyber-cyan' 
-                            : 'bg-cyber-dark/50 border-cyber-slate/50 hover:border-gray-500 text-gray-300'}
-                          ${feedback === 'correct' && idx === currentScenario.correctIndex ? '!bg-cyber-emerald/20 !border-cyber-emerald !text-cyber-emerald' : ''}
-                          ${feedback === 'incorrect' && selectedOption === idx ? '!bg-cyber-rose/20 !border-cyber-rose !text-cyber-rose' : ''}
-                        `}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-6 h-6 flex items-center justify-center rounded text-xs border ${selectedOption === idx ? 'border-cyber-cyan' : 'border-gray-600'}`}>
-                            {String.fromCharCode(65 + idx)}
-                          </div>
-                          <span>{opt}</span>
+                    {currentScenario.options.map((opt, idx) => {
+                      // Determine visual state of option based on feedback
+                      let optionClass = 'bg-cyber-dark/50 border-cyber-slate/50 hover:border-gray-500 text-gray-300';
+                      
+                      if (feedback) {
+                        if (idx === currentScenario.correctIndex) {
+                           optionClass = '!bg-cyber-emerald/20 !border-cyber-emerald !text-cyber-emerald'; // Always highlight correct
+                        } else if (idx === selectedOption && selectedOption !== currentScenario.correctIndex) {
+                           optionClass = '!bg-cyber-rose/20 !border-cyber-rose !text-cyber-rose'; // Highlight wrong selection
+                        } else {
+                           optionClass = 'bg-cyber-dark/30 border-cyber-slate/30 text-gray-600'; // Dim others
+                        }
+                      } else if (selectedOption === idx) {
+                        optionClass = 'bg-cyber-slate border-cyber-cyan text-cyber-cyan';
+                      }
+
+                      return (
+                        <div key={idx} className="space-y-2">
+                          <button
+                            disabled={feedback !== null}
+                            onClick={() => setSelectedOption(idx)}
+                            className={`w-full text-left p-4 rounded border transition-all duration-200 ${optionClass}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-6 h-6 flex items-center justify-center rounded text-xs border ${
+                                feedback && idx === currentScenario.correctIndex ? 'border-cyber-emerald' : 
+                                feedback && idx === selectedOption ? 'border-cyber-rose' :
+                                selectedOption === idx ? 'border-cyber-cyan' : 'border-gray-600'
+                              }`}>
+                                {String.fromCharCode(65 + idx)}
+                              </div>
+                              <span>{opt}</span>
+                            </div>
+                          </button>
+                          
+                          {/* Rationale display per option */}
+                          {feedback && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              className={`text-xs pl-11 pr-4 py-2 border-l-2 ${
+                                idx === currentScenario.correctIndex ? 'border-cyber-emerald text-cyber-emerald/80' : 
+                                'border-cyber-slate text-gray-500'
+                              }`}
+                            >
+                              {currentScenario.rationales[idx]}
+                            </motion.div>
+                          )}
                         </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Action Bar */}
@@ -289,16 +346,6 @@ const App = () => {
                            ) : (
                              <span className="flex items-center gap-2 text-cyber-rose font-bold"><XCircle className="w-5 h-5" /> BREACH SUCCESSFUL</span>
                            )}
-                           
-                           {/* Explanation Toggle */}
-                           {feedback === 'incorrect' && (
-                             <button 
-                              onClick={() => setShowExplanation(!showExplanation)}
-                              className="ml-4 text-xs underline text-gray-400 hover:text-white"
-                             >
-                               {showExplanation ? 'Hide Analysis' : 'View Analysis'}
-                             </button>
-                           )}
                         </div>
                         <button 
                           onClick={() => setGameState(prev => ({...prev, currentScenarioId: null}))}
@@ -310,22 +357,36 @@ const App = () => {
                     )}
                   </div>
                   
-                  {/* Explanation Panel */}
+                  {/* Detailed Remediation Panel */}
                   <AnimatePresence>
-                    {(showExplanation || feedback === 'correct') && (
+                    {(feedback !== null) && (
                       <motion.div 
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="mt-4 bg-cyber-dark p-4 rounded border-l-4 border-cyber-cyan">
-                          <h4 className="text-cyber-cyan font-bold text-sm mb-1 flex items-center gap-2">
-                            <BookOpen className="w-4 h-4" /> FORENSIC ANALYSIS
-                          </h4>
-                          <p className="text-sm text-gray-300 leading-relaxed">
-                            {currentScenario.explanation}
-                          </p>
+                        <div className="mt-4 bg-cyber-dark p-4 rounded border-l-4 border-cyber-cyan space-y-4">
+                          <div>
+                            <h4 className="text-cyber-cyan font-bold text-sm mb-1 flex items-center gap-2">
+                              <BookOpen className="w-4 h-4" /> ANALYSIS
+                            </h4>
+                            <p className="text-sm text-gray-300 leading-relaxed">
+                              {currentScenario.explanation}
+                            </p>
+                          </div>
+
+                          <div className="flex gap-2">
+                             {currentScenario.refs.map((ref, i) => (
+                               <button 
+                                 key={i} 
+                                 onClick={() => addLog(`[LIBRARY] Accessing ${ref.source}: ${ref.section}... ACCESS GRANTED.`)}
+                                 className="text-xs bg-cyber-slate/50 hover:bg-cyber-slate px-3 py-1 rounded text-cyber-cyan flex items-center gap-2 border border-cyber-cyan/20"
+                               >
+                                  <FileText className="w-3 h-3" /> REVIEW: {ref.section}
+                               </button>
+                             ))}
+                          </div>
                         </div>
                       </motion.div>
                     )}
