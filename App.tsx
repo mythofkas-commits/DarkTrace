@@ -66,7 +66,7 @@ const App = () => {
       }
     };
     fetchScenarios();
-  }, [gameState.mode]);
+  }, [gameState.mode, addLog]);
 
   // --- Derived: current mission ---
   const currentMission: Mission | undefined = useMemo(() => {
