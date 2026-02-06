@@ -17,6 +17,7 @@ dist-ssr
 .ocr-cache.txt
 .ocr-cache-chunks/
 .structuring-checkpoint.json
+study-guide-text.txt
 
 # Editor directories and files
 .vscode/*
