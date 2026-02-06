@@ -27,16 +27,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- ENV ---
-const envPath = path.join(__dirname, '..', '.env.local');
-if (fs.existsSync(envPath)) {
-  fs.readFileSync(envPath, 'utf-8').split('\n').forEach(line => {
-    const [key, ...val] = line.split('=');
-    if (key && val.length) process.env[key.trim()] = val.join('=').trim();
-  });
-}
+// Security: keys must come from runtime environment / secret manager.
+// Never load API keys from repository files.
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-if (!GEMINI_API_KEY) { console.error('❌ GEMINI_API_KEY not found'); process.exit(1); }
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+if (!GEMINI_API_KEY) { console.error('GEMINI_API_KEY not found in runtime environment'); process.exit(1); }
 
 // --- FIREBASE ---
 const PROJECT_ID = 'gen-lang-client-0658504679';
@@ -161,6 +156,11 @@ function isLikelyOcrFailure(text: string): boolean {
 
 function hasExamQuestionSignal(text: string): boolean {
   return /\b\d{1,3}\.\s/.test(text) || /\bquestion\s+\d{1,3}\b/i.test(text);
+}
+
+function isLeakedApiKeyError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes('api key was reported as leaked') || m.includes('[403 forbidden]');
 }
 
 function inspectPdfBinary(pdfPath: string): {
@@ -338,6 +338,9 @@ Output plain text. Be thorough — do not skip any answer.`;
         break;
       } catch (err: any) {
         const msg = err.message || String(err);
+        if (isLeakedApiKeyError(msg)) {
+          throw new Error('GEMINI_API_KEY is blocked (reported leaked). Rotate key in .env.local and rerun.');
+        }
         console.log(`      ⚠️ Attempt ${attempt + 1}/3: ${msg.slice(0, 80)}`);
         if (attempt < 2) await new Promise(r => setTimeout(r, (attempt + 1) * 10000));
       }
@@ -434,6 +437,9 @@ ${rawText}`;
     }
   } catch (error: any) {
     const msg = error.message || '';
+    if (isLeakedApiKeyError(msg)) {
+      throw new Error('GEMINI_API_KEY is blocked (reported leaked). Rotate key in .env.local and rerun.');
+    }
     console.error(`   ⚠️ ${examLabel} Q${startQ}-${endQ}: ${msg.slice(0, 120)}`);
     if (retryCount === 0) {
       await new Promise(r => setTimeout(r, msg.includes('429') ? 30000 : 5000));
