@@ -5,11 +5,10 @@ import { Terminal } from './components/Terminal';
 import { NetworkMap } from './components/NetworkMap';
 import { IntelHUD } from './components/IntelHUD';
 import { SignalSearch } from './components/SignalSearch';
-import { scenarios } from './data/dataset';
 import { saveGame, loadGame } from './utils/storage';
 import { auth, db } from './utils/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { GameState, Scenario, DOMAINS, Domain } from './types';
 import { AlertTriangle, CheckCircle, XCircle, Play, ChevronRight, BookOpen, Target, FileText, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,6 +21,34 @@ const App = () => {
   const [showExplanation, setShowExplanation] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [user, setUser] = useState<any>(null);
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [loadingScenarios, setLoadingScenarios] = useState(true);
+
+  // Load scenarios from Firestore
+  useEffect(() => {
+    const fetchScenarios = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'scenarios'));
+        const data = snapshot.docs.map(doc => doc.data() as Scenario);
+        setScenarios(data);
+        addLog(`[DATABASE] Loaded ${data.length} scenarios from Firestore.`);
+      } catch (err) {
+        console.error('Failed to load scenarios:', err);
+        addLog('[ERROR] Failed to load scenarios from database.');
+        // Fallback: try local dataset
+        try {
+          const { scenarios: localScenarios } = await import('./data/dataset');
+          setScenarios(localScenarios);
+          addLog(`[FALLBACK] Loaded ${localScenarios.length} scenarios from local dataset.`);
+        } catch {
+          addLog('[ERROR] No scenario data available.');
+        }
+      } finally {
+        setLoadingScenarios(false);
+      }
+    };
+    fetchScenarios();
+  }, []);
 
   // Filter available scenarios based on cleared list, active domain, AND search term
   const availableScenarios = useMemo(() => {
@@ -39,12 +66,12 @@ const App = () => {
       
       return !isCleared && matchesDomain && matchesSearch;
     });
-  }, [gameState.clearedScenarios, gameState.activeDomain, searchTerm]);
+  }, [scenarios, gameState.clearedScenarios, gameState.activeDomain, searchTerm]);
 
   const currentScenario: Scenario | undefined = useMemo(() => {
     if (!gameState.currentScenarioId) return undefined;
     return scenarios.find(s => s.id === gameState.currentScenarioId);
-  }, [gameState.currentScenarioId]);
+  }, [scenarios, gameState.currentScenarioId]);
 
   // Local Save
   useEffect(() => {

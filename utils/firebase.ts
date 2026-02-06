@@ -3,14 +3,14 @@ import { getAnalytics, isSupported } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// Updated configuration from user
 const firebaseConfig = {
-  apiKey: "AIzaSyCHoHtgyR9SNBax5NnTpPyUhIw3wwgcdn8",
-  authDomain: "aaaaa-ca9a6.firebaseapp.com",
-  projectId: "aaaaa-ca9a6",
-  storageBucket: "aaaaa-ca9a6.firebasestorage.app",
-  messagingSenderId: "67655718873",
-  appId: "1:67655718873:web:4915df3a73f52d787f2bc8"
+  apiKey: "AIzaSyAMzmqqETec9BUcKd0eZAehMAUkRUITDhc",
+  authDomain: "gen-lang-client-0658504679.firebaseapp.com",
+  projectId: "gen-lang-client-0658504679",
+  storageBucket: "gen-lang-client-0658504679.firebasestorage.app",
+  messagingSenderId: "1030995064919",
+  appId: "1:1030995064919:web:af846b58e2ce48fd360b12",
+  measurementId: "G-YQET0MC1SF"
 };
 
 // Initialize Firebase
