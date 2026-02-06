@@ -6,9 +6,12 @@ const DEFAULT_STATE: GameState = {
   xp: 0,
   level: 1,
   clearedScenarios: [],
+  clearedMissions: [],
   currentScenarioId: null,
+  currentMissionId: null,
   activeDomain: 'ALL',
-  streak: 0
+  streak: 0,
+  mode: 'investigate'
 };
 
 export const saveGame = (state: GameState) => {
@@ -22,7 +25,10 @@ export const saveGame = (state: GameState) => {
 export const loadGame = (): GameState => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : DEFAULT_STATE;
+    if (!saved) return DEFAULT_STATE;
+    const parsed = JSON.parse(saved);
+    // Merge with defaults so old saves get new fields
+    return { ...DEFAULT_STATE, ...parsed };
   } catch (e) {
     console.error('Failed to load game state', e);
     return DEFAULT_STATE;
