@@ -1,11 +1,13 @@
 /**
- * PDF to Firestore Converter for DarkTrace
- * Uses Google Gemini 3 Flash Preview to extract questions from PDF
- * Uploads to Firestore in the exact Scenario schema from types.ts
+ * PDF to Firestore — Two-Phase Approach
+ * 
+ * Phase 1: OCR the scanned PDF once using Gemini Flash (cheap, fast)
+ *          Save raw text to a local cache file
+ * Phase 2: Parse the raw text into structured JSON using Flash on plain text
+ *          Upload to Firestore
  *
- * Prerequisites:
- *   1. Run: gcloud auth application-default login
- *   2. Ensure GEMINI_API_KEY is set in .env.local
+ * This sends the 393-page PDF only ONCE instead of 27+ times.
+ * Estimated cost: ~$0.10-0.30 instead of ~$5-8
  *
  * Usage: npx tsx scripts/pdf-to-database.ts
  */
@@ -18,41 +20,33 @@ import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-// --- __dirname fix for ESM ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- ENV SETUP ---
+// --- ENV ---
 const envPath = path.join(__dirname, '..', '.env.local');
 if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf-8');
-  envContent.split('\n').forEach(line => {
-    const [key, ...valueParts] = line.split('=');
-    if (key && valueParts.length > 0) process.env[key.trim()] = valueParts.join('=').trim();
+  fs.readFileSync(envPath, 'utf-8').split('\n').forEach(line => {
+    const [key, ...val] = line.split('=');
+    if (key && val.length) process.env[key.trim()] = val.join('=').trim();
   });
 }
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-if (!GEMINI_API_KEY) {
-  console.error('❌ GEMINI_API_KEY not found in .env.local');
-  process.exit(1);
-}
+if (!GEMINI_API_KEY) { console.error('❌ GEMINI_API_KEY not found'); process.exit(1); }
 
-// --- FIREBASE ADMIN SETUP ---
-const FIREBASE_PROJECT_ID = 'gen-lang-client-0658504679';
-
-initializeApp({
-  credential: applicationDefault(),
-  projectId: FIREBASE_PROJECT_ID
-});
+// --- FIREBASE ---
+const PROJECT_ID = 'gen-lang-client-0658504679';
+initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID });
 const db = getFirestore();
 
-// --- GEMINI SETUP ---
+// --- GEMINI ---
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const fileManager = new GoogleAIFileManager(GEMINI_API_KEY);
-const MODEL_NAME = 'gemini-3-flash-preview';
 
-// --- VALID DOMAINS (from types.ts) ---
+// Flash for OCR (cheap) — Pro only if Flash fails
+const FLASH_MODEL = 'gemini-3-flash-preview';
+
 const VALID_DOMAINS = [
   'General Security Concepts',
   'Threats, Vulnerabilities, Mitigations',
@@ -60,53 +54,6 @@ const VALID_DOMAINS = [
   'Security Operations',
   'Governance, Risk, Compliance'
 ] as const;
-
-// --- EXTRACTION PROMPT ---
-const EXTRACTION_PROMPT = `
-You are a Security+ (SY0-701) exam expert.
-I have uploaded a practice exam PDF by Professor Messer.
-
-TASK: Extract ALL questions from the specified exam section.
-
-Return a JSON array. Each element MUST have this EXACT structure:
-
-{
-  "questionNumber": 1,
-  "examSection": "Exam A",
-  "question": "The full question text...",
-  "options": ["Option A", "Option B", "Option C", "Option D"],
-  "correctIndex": 0,
-  "explanation": "Detailed explanation of why the correct answer is right...",
-  "rationales": [
-    "CORRECT: Why this option is correct.",
-    "INCORRECT: Why this option is wrong.",
-    "INCORRECT: Why this option is wrong.",
-    "INCORRECT: Why this option is wrong."
-  ],
-  "objectiveCodes": ["1.2"],
-  "domain": "General Security Concepts",
-  "tags": ["Cryptography", "Hashing"],
-  "threatLevel": "medium",
-  "logs": ["SIEM_ALERT: Suspicious hash mismatch detected", "ACTION: File quarantined"],
-  "page": 46
-}
-
-CRITICAL RULES:
-1. Return ONLY valid JSON. No markdown code blocks, no explanation outside the JSON array.
-2. "domain" MUST be one of these exact strings:
-   - "General Security Concepts"
-   - "Threats, Vulnerabilities, Mitigations"
-   - "Security Architecture"
-   - "Security Operations"
-   - "Governance, Risk, Compliance"
-3. "rationales" must have exactly 4 entries, one per option in order. Prefix each with "CORRECT:" or "INCORRECT:".
-4. "threatLevel" must be one of: "low", "medium", "high", "critical"
-5. "logs" should be 1-3 realistic SOC log entries related to the scenario. Use prefixes like SIEM_ALERT:, FW_LOG:, AUTH:, SCAN_RPT:, DNS_QUERY:, INCIDENT:, etc.
-6. "tags" should be 2-4 specific Security+ topic keywords.
-7. "objectiveCodes" should be the SY0-701 exam objective codes (e.g. ["2.4"]).
-8. "page" should be the approximate PDF page number where this question appears.
-9. Include the answer explanations from the PDF — they appear after each exam's questions.
-`;
 
 // --- TYPES ---
 interface ExtractedQuestion {
@@ -144,15 +91,10 @@ function normalizeThreatLevel(raw: string): string {
 }
 
 function generateId(examSection: string, questionNumber: number): string {
-  const sectionLetter = examSection.replace(/Exam\s*/i, '').charAt(0).toUpperCase() || 'X';
-  return `EXAM-${sectionLetter}-Q${String(questionNumber).padStart(2, '0')}`;
+  const letter = examSection.replace(/Exam\s*/i, '').charAt(0).toUpperCase() || 'X';
+  return `EXAM-${letter}-Q${String(questionNumber).padStart(2, '0')}`;
 }
 
-/**
- * Convert extracted question to Firestore document matching Scenario interface:
- * { id, domain, question, options, correctIndex, explanation, rationales,
- *   objectiveCodes, tags, threatLevel, logs, refs }
- */
 function toFirestoreDoc(q: ExtractedQuestion) {
   const id = generateId(q.examSection, q.questionNumber);
   return {
@@ -163,182 +105,279 @@ function toFirestoreDoc(q: ExtractedQuestion) {
     correctIndex: q.correctIndex,
     explanation: q.explanation,
     rationales: q.rationales?.length === 4 ? q.rationales : [
-      'CORRECT: See explanation.',
-      'INCORRECT: See explanation.',
-      'INCORRECT: See explanation.',
-      'INCORRECT: See explanation.'
+      'CORRECT: See explanation.', 'INCORRECT: See explanation.',
+      'INCORRECT: See explanation.', 'INCORRECT: See explanation.'
     ],
     objectiveCodes: q.objectiveCodes || [],
     tags: q.tags?.length ? q.tags : ['Security Concepts'],
     threatLevel: normalizeThreatLevel(q.threatLevel),
     logs: q.logs?.length ? q.logs : ['SYSTEM: Security event logged'],
-    refs: [{
-      source: 'Practice Exams',
-      section: q.examSection || 'Exam A',
-      ...(q.page ? { page: q.page } : {})
-    }]
+    refs: [{ source: 'Practice Exams' as const, section: q.examSection, ...(q.page ? { page: q.page } : {}) }]
   };
 }
 
-// --- EXTRACTION ---
-async function extractBatch(
-  model: any,
-  fileUri: string,
-  fileMimeType: string,
-  examLabel: string,
-  startQ: number,
-  endQ: number
-): Promise<ExtractedQuestion[]> {
-  const batchPrompt = `${EXTRACTION_PROMPT}
+function salvageJson(raw: string): ExtractedQuestion[] {
+  const lastBrace = raw.lastIndexOf('}');
+  if (lastBrace === -1) return [];
+  let attempt = raw.slice(raw.indexOf('['), lastBrace + 1) + ']';
+  try { return JSON.parse(attempt); } catch { return []; }
+}
 
-FOCUS: Extract questions ${startQ} through ${endQ} from "${examLabel}".
-The answers/explanations for "${examLabel}" appear later in the PDF after the questions.
-If you cannot find that exact range, extract whatever questions you can find from "${examLabel}".`;
+// ============================================================
+// PHASE 1: OCR — Send the PDF once, get raw text back
+// ============================================================
+async function ocrPdf(fileUri: string, fileMimeType: string): Promise<string> {
+  const cacheFile = path.join(__dirname, '..', '.ocr-cache.txt');
 
-  try {
+  // Use cache if it exists (skip re-uploading)
+  if (fs.existsSync(cacheFile)) {
+    const cached = fs.readFileSync(cacheFile, 'utf-8');
+    if (cached.length > 5000) {
+      console.log(`   📂 Using cached OCR (${(cached.length / 1024).toFixed(0)} KB)`);
+      return cached;
+    }
+  }
+
+  console.log('   🔍 Running OCR on full PDF (one-time cost)...');
+
+  const model = genAI.getGenerativeModel({
+    model: FLASH_MODEL,
+    generationConfig: { maxOutputTokens: 65536, temperature: 0 },
+  });
+
+  // OCR in 3 chunks (one per exam) to stay within output limits
+  const chunks = [
+    { label: 'Exam A questions', pages: 'pages 7 through 44' },
+    { label: 'Exam A answers', pages: 'pages 44 through 139' },
+    { label: 'Exam B questions', pages: 'pages 140 through 170' },
+    { label: 'Exam B answers', pages: 'pages 172 through 265' },
+    { label: 'Exam C questions', pages: 'pages 266 through 298' },
+    { label: 'Exam C answers', pages: 'pages 300 through 392' },
+  ];
+
+  let fullText = '';
+
+  for (const chunk of chunks) {
+    console.log(`      📖 OCR: ${chunk.label} (${chunk.pages})...`);
+
     const result = await model.generateContent([
-      {
-        fileData: {
-          mimeType: fileMimeType,
-          fileUri: fileUri
-        }
-      },
-      { text: batchPrompt }
+      { fileData: { mimeType: fileMimeType, fileUri } },
+      { text: `Transcribe ALL text from ${chunk.pages} of this scanned PDF exactly as written.
+Include question numbers, all answer options (A/B/C/D), and all explanation text.
+Preserve the structure: question number, question text, options, then for answers include the question number, correct answer letter, and full explanation.
+Output plain text only, no JSON, no markdown formatting.
+Be thorough — do not skip any questions or answers.` }
     ]);
 
-    const responseText = result.response.text();
-    const jsonStr = responseText
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim();
+    const text = result.response.text();
+    console.log(`      ✅ Got ${text.length} chars`);
+    fullText += `\n\n=== ${chunk.label.toUpperCase()} ===\n\n${text}`;
 
-    const questions: ExtractedQuestion[] = JSON.parse(jsonStr);
-    return Array.isArray(questions) ? questions : [];
+    await new Promise(r => setTimeout(r, 3000));
+  }
+
+  // Cache it
+  fs.writeFileSync(cacheFile, fullText, 'utf-8');
+  console.log(`   💾 Cached OCR to .ocr-cache.txt (${(fullText.length / 1024).toFixed(0)} KB)`);
+
+  return fullText;
+}
+
+// ============================================================
+// PHASE 2: Structure — Parse plain text into Scenario objects
+// ============================================================
+async function structureBatch(
+  rawText: string,
+  examLabel: string,
+  startQ: number,
+  endQ: number,
+  retryCount = 0
+): Promise<ExtractedQuestion[]> {
+  const model = genAI.getGenerativeModel({
+    model: FLASH_MODEL,
+    generationConfig: { maxOutputTokens: 65536, temperature: 0.1 },
+  });
+
+  const prompt = `Below is OCR text from Professor Messer's SY0-701 Practice Exams PDF.
+It contains questions and their answer explanations for "${examLabel}".
+
+Extract questions ${startQ} through ${endQ} and return a JSON array:
+
+[
+  {
+    "questionNumber": ${startQ},
+    "examSection": "${examLabel}",
+    "question": "Full question text",
+    "options": ["A. text", "B. text", "C. text", "D. text"],
+    "correctIndex": 0,
+    "explanation": "Brief explanation (1-2 sentences)",
+    "rationales": ["CORRECT: Why right.", "INCORRECT: Why wrong.", "INCORRECT: Why wrong.", "INCORRECT: Why wrong."],
+    "objectiveCodes": ["1.2"],
+    "domain": "General Security Concepts",
+    "tags": ["Keyword1", "Keyword2"],
+    "threatLevel": "medium",
+    "logs": ["SIEM_ALERT: relevant log"],
+    "page": 10
+  }
+]
+
+RULES:
+- JSON array ONLY. No markdown, no fences, no extra text.
+- "domain" must be exactly: "General Security Concepts", "Threats, Vulnerabilities, Mitigations", "Security Architecture", "Security Operations", or "Governance, Risk, Compliance"
+- "rationales": exactly 4, matching option order, prefixed CORRECT:/INCORRECT:
+- "correctIndex": 0-based index of the correct option
+- Match each question with its answer from the answers section
+- Keep explanations concise
+
+OCR TEXT:
+${rawText}`;
+
+  try {
+    const result = await model.generateContent([{ text: prompt }]);
+    const jsonStr = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    console.log(`      📄 ${jsonStr.length} chars`);
+
+    try {
+      const q = JSON.parse(jsonStr);
+      return Array.isArray(q) ? q : [];
+    } catch {
+      const salvaged = salvageJson(jsonStr);
+      if (salvaged.length > 0) {
+        console.log(`      🔧 Salvaged ${salvaged.length}`);
+        return salvaged;
+      }
+      if (retryCount === 0 && endQ - startQ > 3) {
+        const mid = Math.floor((startQ + endQ) / 2);
+        console.log(`      🔄 Splitting Q${startQ}-${mid} + Q${mid+1}-${endQ}`);
+        const a = await structureBatch(rawText, examLabel, startQ, mid, 1);
+        await new Promise(r => setTimeout(r, 2000));
+        const b = await structureBatch(rawText, examLabel, mid + 1, endQ, 1);
+        return [...a, ...b];
+      }
+      return [];
+    }
   } catch (error: any) {
-    console.error(`   ⚠️ Batch ${examLabel} Q${startQ}-${endQ} failed:`, error.message || error);
+    const msg = error.message || '';
+    console.error(`   ⚠️ ${examLabel} Q${startQ}-${endQ}: ${msg.slice(0, 120)}`);
+    if (retryCount === 0) {
+      await new Promise(r => setTimeout(r, msg.includes('429') ? 30000 : 5000));
+      return structureBatch(rawText, examLabel, startQ, endQ, 1);
+    }
     return [];
   }
 }
 
-// --- FIRESTORE UPLOAD ---
+// --- FIRESTORE ---
 async function uploadToFirestore(questions: ExtractedQuestion[]) {
-  // Firestore batch limit is 500 writes
-  const BATCH_LIMIT = 450;
   let total = 0;
-
-  for (let i = 0; i < questions.length; i += BATCH_LIMIT) {
-    const chunk = questions.slice(i, i + BATCH_LIMIT);
+  for (let i = 0; i < questions.length; i += 450) {
+    const chunk = questions.slice(i, i + 450);
     const batch = db.batch();
-
     for (const q of chunk) {
       const data = toFirestoreDoc(q);
-      const docRef = db.collection('scenarios').doc(data.id);
-      batch.set(docRef, data);
+      batch.set(db.collection('scenarios').doc(data.id), data);
     }
-
     await batch.commit();
     total += chunk.length;
-    console.log(`   🔥 Committed batch: ${total}/${questions.length}`);
+    console.log(`   🔥 Committed: ${total}/${questions.length}`);
   }
-
   return total;
 }
 
 // --- MAIN ---
 async function main() {
   const pdfPath = path.join(__dirname, '..', 'SY0-701 Practice Exams.pdf');
+  if (!fs.existsSync(pdfPath)) { console.error('❌ PDF not found:', pdfPath); process.exit(1); }
 
-  if (!fs.existsSync(pdfPath)) {
-    console.error('❌ PDF not found:', pdfPath);
-    process.exit(1);
-  }
+  const sizeMB = (fs.statSync(pdfPath).size / 1024 / 1024).toFixed(1);
+  console.log(`📋 PDF: SY0-701 Practice Exams.pdf (${sizeMB} MB, 393 pages, scanned)`);
+  console.log(`🧠 Strategy: OCR once with Flash → structure with Flash on text`);
+  console.log(`💰 Estimated cost: ~$0.10-0.30 (vs ~$5-8 sending full PDF per batch)\n`);
 
-  // 1. Upload PDF to Gemini
-  console.log('🚀 Uploading PDF to Gemini...');
-  const uploadResponse = await fileManager.uploadFile(pdfPath, {
+  // 1. Upload PDF
+  console.log('🚀 Uploading PDF...');
+  const upload = await fileManager.uploadFile(pdfPath, {
     mimeType: 'application/pdf',
     displayName: 'SY0-701 Practice Exams',
   });
-  console.log(`   ✅ Uploaded: ${uploadResponse.file.uri}`);
+  console.log(`   ✅ ${upload.file.uri}`);
 
   // 2. Wait for processing
-  console.log('   ⏳ Waiting for file processing...');
-  let file = await fileManager.getFile(uploadResponse.file.name);
+  console.log('   ⏳ Processing...');
+  let file = await fileManager.getFile(upload.file.name);
   while (file.state === 'PROCESSING') {
     process.stdout.write('.');
-    await new Promise(r => setTimeout(r, 2000));
-    file = await fileManager.getFile(uploadResponse.file.name);
+    await new Promise(r => setTimeout(r, 3000));
+    file = await fileManager.getFile(upload.file.name);
   }
-  if (file.state === 'FAILED') {
-    console.error('\n❌ File processing failed.');
-    process.exit(1);
-  }
-  console.log('\n   ✅ File Ready.');
+  if (file.state === 'FAILED') { console.error('\n❌ Failed.'); process.exit(1); }
+  console.log('\n   ✅ Ready.\n');
 
-  // 3. Extract in batches
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  // 3. Phase 1: OCR (sends PDF only once per chunk, cached after)
+  console.log('═══ PHASE 1: OCR ═══');
+  const ocrText = await ocrPdf(upload.file.uri, upload.file.mimeType);
+  console.log(`   📊 Total OCR: ${(ocrText.length / 1024).toFixed(0)} KB\n`);
+
+  // 4. Phase 2: Structure (text-only, no PDF sent)
+  console.log('═══ PHASE 2: STRUCTURING ═══');
   const allQuestions: ExtractedQuestion[] = [];
 
-  // Messer practice exams: A through E, ~90 questions each
-  const exams = ['Exam A', 'Exam B', 'Exam C', 'Exam D', 'Exam E'];
-  const BATCH_SIZE = 45;
-  const QS_PER_EXAM = 90;
+  // Split OCR text by exam sections for context
+  const examSections = [
+    { label: 'Exam A', pattern: /=== EXAM A QUESTIONS ===([\s\S]*?)=== EXAM A ANSWERS ===([\s\S]*?)(?====|$)/i },
+    { label: 'Exam B', pattern: /=== EXAM B QUESTIONS ===([\s\S]*?)=== EXAM B ANSWERS ===([\s\S]*?)(?====|$)/i },
+    { label: 'Exam C', pattern: /=== EXAM C QUESTIONS ===([\s\S]*?)=== EXAM C ANSWERS ===([\s\S]*?)(?====|$)/i },
+  ];
 
-  for (const exam of exams) {
-    console.log(`\n🤖 Extracting ${exam}...`);
-    for (let start = 1; start <= QS_PER_EXAM; start += BATCH_SIZE) {
-      const end = Math.min(start + BATCH_SIZE - 1, QS_PER_EXAM);
-      console.log(`   📦 ${exam} Q${start}-Q${end}...`);
+  for (const exam of examSections) {
+    console.log(`\n🤖 ${exam.label}...`);
 
-      const batch = await extractBatch(
-        model,
-        uploadResponse.file.uri,
-        uploadResponse.file.mimeType,
-        exam,
-        start,
-        end
-      );
+    const match = ocrText.match(exam.pattern);
+    let examText: string;
+    if (match) {
+      examText = match[0];
+      console.log(`   📝 Matched section: ${(examText.length / 1024).toFixed(0)} KB`);
+    } else {
+      // Fallback: send full text (less ideal but works)
+      console.log(`   ⚠️ Couldn't isolate section, using full text`);
+      examText = ocrText;
+    }
 
+    const BATCH = 10;
+    for (let start = 1; start <= 90; start += BATCH) {
+      const end = Math.min(start + BATCH - 1, 90);
+      console.log(`   📦 ${exam.label} Q${start}-Q${end}...`);
+
+      const batch = await structureBatch(examText, exam.label, start, end);
       if (batch.length > 0) {
-        batch.forEach(q => { if (!q.examSection) q.examSection = exam; });
+        batch.forEach(q => { if (!q.examSection) q.examSection = exam.label; });
         allQuestions.push(...batch);
-        console.log(`   ✅ Got ${batch.length} questions`);
+        console.log(`   ✅ +${batch.length} (total: ${allQuestions.length})`);
       } else {
-        console.log(`   ⚠️ No questions returned`);
+        console.log(`   ⚠️ None returned`);
       }
 
-      // Rate limit pause between batches
       await new Promise(r => setTimeout(r, 2000));
     }
   }
 
-  console.log(`\n📊 Total extracted: ${allQuestions.length} questions`);
+  console.log(`\n📊 Total: ${allQuestions.length} questions`);
+  if (allQuestions.length === 0) { console.error('❌ No questions extracted.'); process.exit(1); }
 
-  if (allQuestions.length === 0) {
-    console.error('❌ No questions extracted.');
-    process.exit(1);
-  }
-
-  // 4. Deduplicate by ID
+  // 5. Deduplicate
   const seen = new Set<string>();
-  const unique: ExtractedQuestion[] = [];
-  for (const q of allQuestions) {
+  const unique = allQuestions.filter(q => {
     const id = generateId(q.examSection, q.questionNumber);
-    if (!seen.has(id)) {
-      seen.add(id);
-      unique.push(q);
-    }
-  }
-  console.log(`   🧹 After dedup: ${unique.length} unique questions`);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  console.log(`   🧹 Unique: ${unique.length}`);
 
-  // 5. Upload to Firestore
-  console.log(`\n🔥 Uploading to Firestore (project: ${FIREBASE_PROJECT_ID})...`);
-  console.log(`   Collection: "scenarios"`);
-  const uploaded = await uploadToFirestore(unique);
-  console.log(`\n✅ Done! ${uploaded} scenarios uploaded to Firestore.`);
-  console.log(`\n💡 Next steps:`);
-  console.log(`   1. Update utils/firebase.ts to use project "${FIREBASE_PROJECT_ID}"`);
-  console.log(`   2. Update App.tsx to fetch from Firestore collection "scenarios" instead of importing dataset.ts`);
+  // 6. Upload
+  console.log(`\n🔥 Uploading to Firestore (${PROJECT_ID})...`);
+  const n = await uploadToFirestore(unique);
+  console.log(`\n✅ Done! ${n} scenarios in "scenarios" collection.`);
 }
 
 main().catch(console.error);
