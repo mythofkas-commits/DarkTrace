@@ -1,18 +1,27 @@
-/**
- * PDF to Database Converter for DarkTrace
- * Uses Google Gemini AI to extract questions and uploads directly to Firestore
- *
- * Usage: npx tsx scripts/pdf-to-database.ts
- */
-
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url'; // <--- NEW IMPORT
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
+// --- FIX FOR __dirname IN ES MODULES ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// ---------------------------------------
+
 // --- FIREBASE SETUP ---
 // Initialize Admin SDK in "God Mode"
+initializeApp({
+  credential: applicationDefault(),
+  projectId: "gen-lang-client-0658504679" // Ensure this matches your Firebase Config!
+});
+
+const db = getFirestore();
+
+// --- REST OF CODE REMAINS THE SAME ---
+const envPath = path.join(__dirname, '..', '.env.local');
+// ...
 // NOTE: For this to work locally, run: gcloud auth application-default login
 initializeApp({
   credential: applicationDefault(),
