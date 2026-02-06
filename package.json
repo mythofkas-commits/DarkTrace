@@ -10,19 +10,20 @@
     "convert-pdf": "npx tsx scripts/pdf-to-database.ts"
   },
   "dependencies": {
-    "react": "18.2.0",
-    "react-dom": "^19.2.4",
+    "firebase": "^12.8.0",
+    "firebase-admin": "^13.6.1",
     "framer-motion": "10.16.4",
     "lucide-react": "0.263.1",
-    "firebase": "^12.8.0"
+    "react": "18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "tsx": "^4.7.0",
     "pdf-parse": "^1.1.1",
-    "@google/generative-ai": "^0.21.0"
+    "tsx": "^4.7.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
   }
 }
