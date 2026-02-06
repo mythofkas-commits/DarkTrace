@@ -1,6 +1,13 @@
+/**
+ * PDF to Database Converter for DarkTrace
+ * Uses Google Gemini AI to extract questions and uploads directly to Firestore
+ *
+ * Usage: npx tsx scripts/pdf-to-database.ts
+ */
+
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url'; // <--- NEW IMPORT
+import { fileURLToPath } from 'url';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -8,24 +15,12 @@ import { getFirestore } from 'firebase-admin/firestore';
 // --- FIX FOR __dirname IN ES MODULES ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// ---------------------------------------
 
 // --- FIREBASE SETUP ---
 // Initialize Admin SDK in "God Mode"
 initializeApp({
   credential: applicationDefault(),
-  projectId: "gen-lang-client-0658504679" // Ensure this matches your Firebase Config!
-});
-
-const db = getFirestore();
-
-// --- REST OF CODE REMAINS THE SAME ---
-const envPath = path.join(__dirname, '..', '.env.local');
-// ...
-// NOTE: For this to work locally, run: gcloud auth application-default login
-initializeApp({
-  credential: applicationDefault(),
-  projectId: "gen-lang-client-0658504679" // Your specific Project ID
+  projectId: "gen-lang-client-0658504679" // Your DarkTrace Project ID
 });
 
 const db = getFirestore();
@@ -62,7 +57,6 @@ interface ExtractedQuestion {
   domain: string;
 }
 
-// Prompt identical to before
 const EXTRACTION_PROMPT = `You are an expert at parsing CompTIA Security+ (SY0-701) practice exam questions.
 
 Extract ALL questions from the following PDF text. Return a JSON array with this exact structure:
@@ -92,7 +86,7 @@ async function extractTextFromPDF(pdfPath: string): Promise<string> {
 }
 
 async function extractQuestionsWithGemini(text: string): Promise<ExtractedQuestion[]> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
   const CHUNK_SIZE = 30000;
   const chunks: string[] = [];
 
@@ -135,23 +129,21 @@ function determineThreatLevel(domain: string, tags: string[]): string {
   const critical = ['ransomware', 'ddos', 'apt', 'zero-day'];
   const allText = [...tags, domain].join(' ').toLowerCase();
   if (critical.some(k => allText.includes(k))) return 'critical';
-  return 'medium'; // Simplified default
+  return 'medium'; 
 }
 
 function generateTags(question: string, explanation: string): string[] {
-  // Simplified tagging logic
   const keywords = ['cryptography', 'network', 'malware', 'cloud', 'compliance'];
   const text = (question + explanation).toLowerCase();
   return keywords.filter(k => text.includes(k));
 }
 
-// CHANGED: Returns Object instead of String
 function convertToFirestoreObject(q: ExtractedQuestion) {
   const id = generateScenarioId(q.examSection, q.questionNumber);
   const tags = generateTags(q.question, q.explanation);
   
   return {
-    id: id, // Used as Document ID
+    id: id,
     domain: q.domain,
     question: q.question,
     options: q.options,
@@ -161,11 +153,10 @@ function convertToFirestoreObject(q: ExtractedQuestion) {
     objectiveCodes: q.objectiveCodes,
     tags: tags.length ? tags : ['Security Concepts'],
     threatLevel: determineThreatLevel(q.domain, tags),
-    logs: ['SYSTEM: Security event logged'], // Default log
+    logs: ['SYSTEM: Security event logged'],
     uploadedAt: new Date(),
-    // SPACED REPETITION FIELDS
-    reviewDue: new Date(), // Due immediately
-    confidenceLevel: 0,    // Start at 0
+    reviewDue: new Date(), 
+    confidenceLevel: 0,
     reviewHistory: []
   };
 }
@@ -195,11 +186,9 @@ async function main() {
     process.exit(1);
   }
 
-  // 1. Extract Text
   console.log('📖 Extracting text...');
   const pdfText = await extractTextFromPDF(pdfPath);
 
-  // 2. Parse with Gemini
   console.log('🤖 Parsing with Gemini...');
   const questions = await extractQuestionsWithGemini(pdfText);
 
@@ -208,7 +197,6 @@ async function main() {
     process.exit(1);
   }
 
-  // 3. Upload to DB
   await uploadToFirestore(questions);
   
   console.log('\n✨ COMPLETE! Data is now live in your app.');
