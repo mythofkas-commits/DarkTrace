@@ -2,19 +2,11 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# DarkTrace Investigation Game For SY0-701 Security+ Certification
 
-This contains everything you need to run your app locally.
+Lectures are boring. Nobody has time for that. Instead, I caused trouble so you get to learn and solve them!
 
-View your app in AI Studio: https://ai.studio/apps/drive/1xNcQ7YzXLULoGLJWZs18y43tonKcS3kj
+This is for people - like myself - who learn by having to resolve problems through complex troubleshooting. 
+This game provides incentives and problems, requiring you to investigate, learn, and gain points. 
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+This game includes the FULL lectures for SY0-701 AND 3 full practice exams for this certification! ALL 5 domains and latest changes have been covered.
