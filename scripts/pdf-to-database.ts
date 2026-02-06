@@ -85,6 +85,11 @@ interface ExtractedQuestion {
   page?: number;
 }
 
+interface StructuringCheckpoint {
+  questions: ExtractedQuestion[];
+  completedBatches: string[];
+}
+
 const OCR_FAILURE_PATTERNS = [
   'blank page',
   'blank pages',
@@ -173,6 +178,27 @@ function inspectPdfBinary(pdfPath: string): {
   return { replacementTriplets, sha256 };
 }
 
+function loadStructuringCheckpoint(filePath: string): StructuringCheckpoint {
+  if (!fs.existsSync(filePath)) return { questions: [], completedBatches: [] };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return {
+      questions: Array.isArray(parsed?.questions) ? parsed.questions : [],
+      completedBatches: Array.isArray(parsed?.completedBatches) ? parsed.completedBatches : [],
+    };
+  } catch {
+    return { questions: [], completedBatches: [] };
+  }
+}
+
+function saveStructuringCheckpoint(filePath: string, questions: ExtractedQuestion[], completedBatches: Set<string>) {
+  const payload: StructuringCheckpoint = {
+    questions,
+    completedBatches: Array.from(completedBatches),
+  };
+  fs.writeFileSync(filePath, JSON.stringify(payload), 'utf-8');
+}
+
 // ============================================================
 // PHASE 0: Split the PDF into small chunks with pdf-lib
 // ============================================================
@@ -224,6 +250,10 @@ async function splitPdf(pdfPath: string, outputDir: string): Promise<Map<string,
 // ============================================================
 async function ocrChunks(chunkFiles: Map<string, string>): Promise<string> {
   const cacheFile = path.join(__dirname, '..', '.ocr-cache.txt');
+  const chunkCacheDir = path.join(__dirname, '..', '.ocr-cache-chunks');
+  if (!fs.existsSync(chunkCacheDir)) fs.mkdirSync(chunkCacheDir, { recursive: true });
+  const chunkCachePath = (label: string) =>
+    path.join(chunkCacheDir, `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`);
 
   if (fs.existsSync(cacheFile)) {
     const cached = fs.readFileSync(cacheFile, 'utf-8');
@@ -243,6 +273,16 @@ async function ocrChunks(chunkFiles: Map<string, string>): Promise<string> {
   let fullText = '';
 
   for (const chunk of EXAM_CHUNKS) {
+    const cachedPath = chunkCachePath(chunk.label);
+    if (fs.existsSync(cachedPath)) {
+      const cachedChunk = fs.readFileSync(cachedPath, 'utf-8');
+      if (cachedChunk.length > 1000 && !isLikelyOcrFailure(cachedChunk) && hasExamQuestionSignal(cachedChunk)) {
+        console.log(`   Using cached chunk OCR: ${chunk.label}`);
+        fullText += `\n\n=== ${chunk.label.toUpperCase()} ===\n\n${cachedChunk}`;
+        continue;
+      }
+    }
+
     const filePath = chunkFiles.get(chunk.label);
     if (!filePath) continue;
 
@@ -305,7 +345,9 @@ Output plain text. Be thorough — do not skip any answer.`;
 
     if (text) {
       console.log(`      ✅ ${text.length} chars`);
+      fs.writeFileSync(cachedPath, text, 'utf-8');
       fullText += `\n\n=== ${chunk.label.toUpperCase()} ===\n\n${text}`;
+      fs.writeFileSync(cacheFile, fullText, 'utf-8');
     } else {
       console.log(`      ❌ OCR failed for ${chunk.label}`);
     }
@@ -451,7 +493,13 @@ async function main() {
 
   // Phase 2: Structure
   console.log('═══ PHASE 2: STRUCTURING ═══');
-  const allQuestions: ExtractedQuestion[] = [];
+  const structCheckpointFile = path.join(__dirname, '..', '.structuring-checkpoint.json');
+  const structCheckpoint = loadStructuringCheckpoint(structCheckpointFile);
+  const completedBatches = new Set<string>(structCheckpoint.completedBatches);
+  const allQuestions: ExtractedQuestion[] = [...structCheckpoint.questions];
+  if (completedBatches.size > 0 || allQuestions.length > 0) {
+    console.log(`   Resuming structuring checkpoint: ${completedBatches.size} batches, ${allQuestions.length} questions`);
+  }
 
   const examSections = [
     { label: 'Exam A', pattern: /=== EXAM A QUESTIONS ===([\s\S]*?)=== EXAM A ANSWERS ===([\s\S]*?)(?====|$)/i },
@@ -475,12 +523,19 @@ async function main() {
     const BATCH = 10;
     for (let start = 1; start <= 90; start += BATCH) {
       const end = Math.min(start + BATCH - 1, 90);
+      const batchKey = `${exam.label}:${start}-${end}`;
+      if (completedBatches.has(batchKey)) {
+        console.log(`   Skipping cached batch ${batchKey}`);
+        continue;
+      }
       console.log(`   📦 ${exam.label} Q${start}-Q${end}...`);
 
       const batch = await structureBatch(examText, exam.label, start, end);
       if (batch.length > 0) {
         batch.forEach(q => { if (!q.examSection) q.examSection = exam.label; });
         allQuestions.push(...batch);
+        completedBatches.add(batchKey);
+        saveStructuringCheckpoint(structCheckpointFile, allQuestions, completedBatches);
         console.log(`   ✅ +${batch.length} (total: ${allQuestions.length})`);
       } else {
         console.log(`   ⚠️ None returned`);
@@ -505,6 +560,7 @@ async function main() {
   // Upload
   console.log(`\n🔥 Uploading to Firestore (${PROJECT_ID})...`);
   const n = await uploadToFirestore(unique);
+  if (fs.existsSync(structCheckpointFile)) fs.unlinkSync(structCheckpointFile);
   console.log(`\n✅ Done! ${n} scenarios in "scenarios" collection.`);
 }
 
