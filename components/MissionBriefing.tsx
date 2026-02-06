@@ -1,6 +1,6 @@
 import React from 'react';
 import { Mission } from '../types';
-import { AlertTriangle, ChevronRight, FileText, Shield } from 'lucide-react';
+import { AlertTriangle, FileText, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface MissionBriefingProps {
