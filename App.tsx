@@ -579,7 +579,7 @@ const App = () => {
                         </div>
                         <p className={`text-xs ${challengeResult === 'correct' ? 'text-cyber-emerald/80' : 'text-cyber-rose/80'}`}>
                           {challengeResult === 'correct'
-                            ? '+225 XP (75 investigation + 150 correct response + streak bonus)'
+                            ? 'XP gained: 75 investigation + 150 correct response + streak bonus (varies with streak)'
                             : '+75 XP (investigation completed — you still learned from the evidence)'}
                         </p>
                       </div>
