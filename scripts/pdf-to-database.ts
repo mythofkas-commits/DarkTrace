@@ -83,7 +83,7 @@ async function extractTextFromPDF(pdfPath: string): Promise<string> {
 }
 
 async function extractQuestionsWithGemini(text: string): Promise<ExtractedQuestion[]> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
   const CHUNK_SIZE = 30000;
   const chunks: string[] = [];
 
