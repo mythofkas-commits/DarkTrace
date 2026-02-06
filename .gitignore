@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# PDF processing cache
+.pdf-chunks/
+.ocr-cache.txt
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

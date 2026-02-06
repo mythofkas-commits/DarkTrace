@@ -1,13 +1,14 @@
 /**
- * PDF to Firestore — Two-Phase Approach
+ * PDF to Firestore — Split & OCR Approach
  * 
- * Phase 1: OCR the scanned PDF once using Gemini Flash (cheap, fast)
- *          Save raw text to a local cache file
- * Phase 2: Parse the raw text into structured JSON using Flash on plain text
- *          Upload to Firestore
+ * 1. Split 393-page PDF into 6 small chunks using pdf-lib (pure JS)
+ * 2. Upload each chunk to Gemini separately
+ * 3. OCR each chunk (small file = fast, no timeout)
+ * 4. Structure OCR text into Scenario JSON with Flash
+ * 5. Upload to Firestore
  *
- * This sends the 393-page PDF only ONCE instead of 27+ times.
- * Estimated cost: ~$0.10-0.30 instead of ~$5-8
+ * Each Gemini call processes 30-95 pages instead of 393.
+ * Cached after first run — re-runs skip OCR entirely.
  *
  * Usage: npx tsx scripts/pdf-to-database.ts
  */
@@ -15,6 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { PDFDocument } from 'pdf-lib';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
@@ -43,9 +45,19 @@ const db = getFirestore();
 // --- GEMINI ---
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const fileManager = new GoogleAIFileManager(GEMINI_API_KEY);
-
-// Flash for OCR (cheap) — Pro only if Flash fails
 const FLASH_MODEL = 'gemini-3-flash-preview';
+const REQUEST_TIMEOUT = { timeout: 300_000 };
+
+// --- PDF STRUCTURE ---
+// Page numbers are 1-indexed as they appear in PDF
+const EXAM_CHUNKS = [
+  { label: 'Exam A questions', startPage: 7,   endPage: 44,  exam: 'Exam A', type: 'questions' },
+  { label: 'Exam A answers',   startPage: 45,  endPage: 139, exam: 'Exam A', type: 'answers'   },
+  { label: 'Exam B questions', startPage: 140, endPage: 170, exam: 'Exam B', type: 'questions' },
+  { label: 'Exam B answers',   startPage: 172, endPage: 265, exam: 'Exam B', type: 'answers'   },
+  { label: 'Exam C questions', startPage: 266, endPage: 298, exam: 'Exam C', type: 'questions' },
+  { label: 'Exam C answers',   startPage: 300, endPage: 392, exam: 'Exam C', type: 'answers'   },
+];
 
 const VALID_DOMAINS = [
   'General Security Concepts',
@@ -119,17 +131,63 @@ function toFirestoreDoc(q: ExtractedQuestion) {
 function salvageJson(raw: string): ExtractedQuestion[] {
   const lastBrace = raw.lastIndexOf('}');
   if (lastBrace === -1) return [];
-  let attempt = raw.slice(raw.indexOf('['), lastBrace + 1) + ']';
-  try { return JSON.parse(attempt); } catch { return []; }
+  const firstBracket = raw.indexOf('[');
+  if (firstBracket === -1) return [];
+  try { return JSON.parse(raw.slice(firstBracket, lastBrace + 1) + ']'); } catch { return []; }
 }
 
 // ============================================================
-// PHASE 1: OCR — Send the PDF once, get raw text back
+// PHASE 0: Split the PDF into small chunks with pdf-lib
 // ============================================================
-async function ocrPdf(fileUri: string, fileMimeType: string): Promise<string> {
+async function splitPdf(pdfPath: string, outputDir: string): Promise<Map<string, string>> {
+  console.log('✂️  Splitting PDF into exam chunks...');
+
+  const pdfBytes = fs.readFileSync(pdfPath);
+  const srcDoc = await PDFDocument.load(pdfBytes);
+  const totalPages = srcDoc.getPageCount();
+  console.log(`   Source: ${totalPages} pages, ${(pdfBytes.length / 1024 / 1024).toFixed(1)} MB`);
+
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+  const chunkFiles = new Map<string, string>();
+
+  for (const chunk of EXAM_CHUNKS) {
+    const outPath = path.join(outputDir, `${chunk.exam.replace(' ', '')}-${chunk.type}.pdf`);
+
+    // Skip if already split
+    if (fs.existsSync(outPath)) {
+      const size = (fs.statSync(outPath).size / 1024).toFixed(0);
+      console.log(`   📂 Cached: ${chunk.label} (${size} KB)`);
+      chunkFiles.set(chunk.label, outPath);
+      continue;
+    }
+
+    const newDoc = await PDFDocument.create();
+    // pdf-lib uses 0-indexed pages
+    const startIdx = chunk.startPage - 1;
+    const endIdx = Math.min(chunk.endPage - 1, totalPages - 1);
+    const indices = Array.from({ length: endIdx - startIdx + 1 }, (_, i) => startIdx + i);
+
+    const pages = await newDoc.copyPages(srcDoc, indices);
+    pages.forEach(p => newDoc.addPage(p));
+
+    const outBytes = await newDoc.save();
+    fs.writeFileSync(outPath, outBytes);
+
+    const sizeKB = (outBytes.length / 1024).toFixed(0);
+    console.log(`   ✅ ${chunk.label}: pp.${chunk.startPage}-${chunk.endPage} → ${sizeKB} KB (${indices.length} pages)`);
+    chunkFiles.set(chunk.label, outPath);
+  }
+
+  return chunkFiles;
+}
+
+// ============================================================
+// PHASE 1: OCR each small chunk (upload + read separately)
+// ============================================================
+async function ocrChunks(chunkFiles: Map<string, string>): Promise<string> {
   const cacheFile = path.join(__dirname, '..', '.ocr-cache.txt');
 
-  // Use cache if it exists (skip re-uploading)
   if (fs.existsSync(cacheFile)) {
     const cached = fs.readFileSync(cacheFile, 'utf-8');
     if (cached.length > 5000) {
@@ -138,68 +196,98 @@ async function ocrPdf(fileUri: string, fileMimeType: string): Promise<string> {
     }
   }
 
-  console.log('   🔍 Running OCR on full PDF (one-time cost)...');
-
-  const model = genAI.getGenerativeModel({
-    model: FLASH_MODEL,
-    generationConfig: { maxOutputTokens: 65536, temperature: 0 },
-  });
-
-  // OCR in 3 chunks (one per exam) to stay within output limits
-  const chunks = [
-    { label: 'Exam A questions', pages: 'pages 7 through 44' },
-    { label: 'Exam A answers', pages: 'pages 44 through 139' },
-    { label: 'Exam B questions', pages: 'pages 140 through 170' },
-    { label: 'Exam B answers', pages: 'pages 172 through 265' },
-    { label: 'Exam C questions', pages: 'pages 266 through 298' },
-    { label: 'Exam C answers', pages: 'pages 300 through 392' },
-  ];
+  const model = genAI.getGenerativeModel(
+    { model: FLASH_MODEL, generationConfig: { maxOutputTokens: 65536, temperature: 0 } },
+    REQUEST_TIMEOUT
+  );
 
   let fullText = '';
 
-  for (const chunk of chunks) {
-    console.log(`      📖 OCR: ${chunk.label} (${chunk.pages})...`);
+  for (const chunk of EXAM_CHUNKS) {
+    const filePath = chunkFiles.get(chunk.label);
+    if (!filePath) continue;
 
-    const result = await model.generateContent([
-      { fileData: { mimeType: fileMimeType, fileUri } },
-      { text: `Transcribe ALL text from ${chunk.pages} of this scanned PDF exactly as written.
-Include question numbers, all answer options (A/B/C/D), and all explanation text.
-Preserve the structure: question number, question text, options, then for answers include the question number, correct answer letter, and full explanation.
-Output plain text only, no JSON, no markdown formatting.
-Be thorough — do not skip any questions or answers.` }
-    ]);
+    console.log(`   📖 OCR: ${chunk.label}...`);
 
-    const text = result.response.text();
-    console.log(`      ✅ Got ${text.length} chars`);
-    fullText += `\n\n=== ${chunk.label.toUpperCase()} ===\n\n${text}`;
+    // Upload this small chunk to Gemini
+    let uploadUri: string;
+    let uploadMime: string;
+    try {
+      const upload = await fileManager.uploadFile(filePath, {
+        mimeType: 'application/pdf',
+        displayName: chunk.label,
+      });
+      uploadUri = upload.file.uri;
+      uploadMime = upload.file.mimeType;
+
+      // Wait for processing
+      let file = await fileManager.getFile(upload.file.name);
+      while (file.state === 'PROCESSING') {
+        await new Promise(r => setTimeout(r, 2000));
+        file = await fileManager.getFile(upload.file.name);
+      }
+      if (file.state === 'FAILED') {
+        console.log(`      ❌ Processing failed for ${chunk.label}, skipping`);
+        continue;
+      }
+    } catch (err: any) {
+      console.log(`      ❌ Upload failed: ${(err.message || '').slice(0, 80)}`);
+      continue;
+    }
+
+    // OCR with retries
+    let text = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const ocrPrompt = chunk.type === 'questions'
+          ? `Transcribe ALL text from this PDF exactly as written.
+Include every question number, the full question text, and all answer options (A/B/C/D).
+Output plain text. Be thorough — do not skip any question.`
+          : `Transcribe ALL text from this PDF exactly as written.
+This contains answer explanations. Include every question number, the correct answer letter, and the full explanation text.
+Output plain text. Be thorough — do not skip any answer.`;
+
+        const result = await model.generateContent([
+          { fileData: { mimeType: uploadMime, fileUri: uploadUri } },
+          { text: ocrPrompt }
+        ]);
+        text = result.response.text();
+        break;
+      } catch (err: any) {
+        const msg = err.message || String(err);
+        console.log(`      ⚠️ Attempt ${attempt + 1}/3: ${msg.slice(0, 80)}`);
+        if (attempt < 2) await new Promise(r => setTimeout(r, (attempt + 1) * 10000));
+      }
+    }
+
+    if (text) {
+      console.log(`      ✅ ${text.length} chars`);
+      fullText += `\n\n=== ${chunk.label.toUpperCase()} ===\n\n${text}`;
+    } else {
+      console.log(`      ❌ OCR failed for ${chunk.label}`);
+    }
 
     await new Promise(r => setTimeout(r, 3000));
   }
 
-  // Cache it
   fs.writeFileSync(cacheFile, fullText, 'utf-8');
-  console.log(`   💾 Cached OCR to .ocr-cache.txt (${(fullText.length / 1024).toFixed(0)} KB)`);
-
+  console.log(`   💾 Cached OCR: ${(fullText.length / 1024).toFixed(0)} KB`);
   return fullText;
 }
 
 // ============================================================
-// PHASE 2: Structure — Parse plain text into Scenario objects
+// PHASE 2: Structure OCR text → Scenario JSON
 // ============================================================
 async function structureBatch(
-  rawText: string,
-  examLabel: string,
-  startQ: number,
-  endQ: number,
-  retryCount = 0
+  rawText: string, examLabel: string, startQ: number, endQ: number, retryCount = 0
 ): Promise<ExtractedQuestion[]> {
-  const model = genAI.getGenerativeModel({
-    model: FLASH_MODEL,
-    generationConfig: { maxOutputTokens: 65536, temperature: 0.1 },
-  });
+  const model = genAI.getGenerativeModel(
+    { model: FLASH_MODEL, generationConfig: { maxOutputTokens: 65536, temperature: 0.1 } },
+    REQUEST_TIMEOUT
+  );
 
-  const prompt = `Below is OCR text from Professor Messer's SY0-701 Practice Exams PDF.
-It contains questions and their answer explanations for "${examLabel}".
+  const prompt = `Below is OCR text from Professor Messer's SY0-701 Practice Exams.
+It contains questions and answer explanations for "${examLabel}".
 
 Extract questions ${startQ} through ${endQ} and return a JSON array:
 
@@ -222,11 +310,10 @@ Extract questions ${startQ} through ${endQ} and return a JSON array:
 ]
 
 RULES:
-- JSON array ONLY. No markdown, no fences, no extra text.
-- "domain" must be exactly: "General Security Concepts", "Threats, Vulnerabilities, Mitigations", "Security Architecture", "Security Operations", or "Governance, Risk, Compliance"
+- JSON array ONLY. No markdown fences, no extra text.
+- "domain" must be exactly one of: "General Security Concepts", "Threats, Vulnerabilities, Mitigations", "Security Architecture", "Security Operations", "Governance, Risk, Compliance"
 - "rationales": exactly 4, matching option order, prefixed CORRECT:/INCORRECT:
-- "correctIndex": 0-based index of the correct option
-- Match each question with its answer from the answers section
+- "correctIndex": 0-based index of correct option
 - Keep explanations concise
 
 OCR TEXT:
@@ -242,10 +329,7 @@ ${rawText}`;
       return Array.isArray(q) ? q : [];
     } catch {
       const salvaged = salvageJson(jsonStr);
-      if (salvaged.length > 0) {
-        console.log(`      🔧 Salvaged ${salvaged.length}`);
-        return salvaged;
-      }
+      if (salvaged.length > 0) { console.log(`      🔧 Salvaged ${salvaged.length}`); return salvaged; }
       if (retryCount === 0 && endQ - startQ > 3) {
         const mid = Math.floor((startQ + endQ) / 2);
         console.log(`      🔄 Splitting Q${startQ}-${mid} + Q${mid+1}-${endQ}`);
@@ -290,39 +374,25 @@ async function main() {
   if (!fs.existsSync(pdfPath)) { console.error('❌ PDF not found:', pdfPath); process.exit(1); }
 
   const sizeMB = (fs.statSync(pdfPath).size / 1024 / 1024).toFixed(1);
-  console.log(`📋 PDF: SY0-701 Practice Exams.pdf (${sizeMB} MB, 393 pages, scanned)`);
-  console.log(`🧠 Strategy: OCR once with Flash → structure with Flash on text`);
-  console.log(`💰 Estimated cost: ~$0.10-0.30 (vs ~$5-8 sending full PDF per batch)\n`);
+  console.log(`📋 PDF: SY0-701 Practice Exams.pdf (${sizeMB} MB, 393 pages)`);
+  console.log(`🧠 Strategy: Split PDF → OCR small chunks → Structure → Firestore`);
+  console.log(`💰 Each Gemini call sees 30-95 pages instead of 393\n`);
 
-  // 1. Upload PDF
-  console.log('🚀 Uploading PDF...');
-  const upload = await fileManager.uploadFile(pdfPath, {
-    mimeType: 'application/pdf',
-    displayName: 'SY0-701 Practice Exams',
-  });
-  console.log(`   ✅ ${upload.file.uri}`);
+  // Phase 0: Split
+  console.log('═══ PHASE 0: SPLIT PDF ═══');
+  const splitDir = path.join(__dirname, '..', '.pdf-chunks');
+  const chunkFiles = await splitPdf(pdfPath, splitDir);
+  console.log();
 
-  // 2. Wait for processing
-  console.log('   ⏳ Processing...');
-  let file = await fileManager.getFile(upload.file.name);
-  while (file.state === 'PROCESSING') {
-    process.stdout.write('.');
-    await new Promise(r => setTimeout(r, 3000));
-    file = await fileManager.getFile(upload.file.name);
-  }
-  if (file.state === 'FAILED') { console.error('\n❌ Failed.'); process.exit(1); }
-  console.log('\n   ✅ Ready.\n');
-
-  // 3. Phase 1: OCR (sends PDF only once per chunk, cached after)
-  console.log('═══ PHASE 1: OCR ═══');
-  const ocrText = await ocrPdf(upload.file.uri, upload.file.mimeType);
+  // Phase 1: OCR each chunk
+  console.log('═══ PHASE 1: OCR CHUNKS ═══');
+  const ocrText = await ocrChunks(chunkFiles);
   console.log(`   📊 Total OCR: ${(ocrText.length / 1024).toFixed(0)} KB\n`);
 
-  // 4. Phase 2: Structure (text-only, no PDF sent)
+  // Phase 2: Structure
   console.log('═══ PHASE 2: STRUCTURING ═══');
   const allQuestions: ExtractedQuestion[] = [];
 
-  // Split OCR text by exam sections for context
   const examSections = [
     { label: 'Exam A', pattern: /=== EXAM A QUESTIONS ===([\s\S]*?)=== EXAM A ANSWERS ===([\s\S]*?)(?====|$)/i },
     { label: 'Exam B', pattern: /=== EXAM B QUESTIONS ===([\s\S]*?)=== EXAM B ANSWERS ===([\s\S]*?)(?====|$)/i },
@@ -336,9 +406,8 @@ async function main() {
     let examText: string;
     if (match) {
       examText = match[0];
-      console.log(`   📝 Matched section: ${(examText.length / 1024).toFixed(0)} KB`);
+      console.log(`   📝 Section: ${(examText.length / 1024).toFixed(0)} KB`);
     } else {
-      // Fallback: send full text (less ideal but works)
       console.log(`   ⚠️ Couldn't isolate section, using full text`);
       examText = ocrText;
     }
@@ -364,17 +433,16 @@ async function main() {
   console.log(`\n📊 Total: ${allQuestions.length} questions`);
   if (allQuestions.length === 0) { console.error('❌ No questions extracted.'); process.exit(1); }
 
-  // 5. Deduplicate
+  // Deduplicate
   const seen = new Set<string>();
   const unique = allQuestions.filter(q => {
     const id = generateId(q.examSection, q.questionNumber);
     if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
+    seen.add(id); return true;
   });
   console.log(`   🧹 Unique: ${unique.length}`);
 
-  // 6. Upload
+  // Upload
   console.log(`\n🔥 Uploading to Firestore (${PROJECT_ID})...`);
   const n = await uploadToFirestore(unique);
   console.log(`\n✅ Done! ${n} scenarios in "scenarios" collection.`);
