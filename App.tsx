@@ -113,7 +113,7 @@ const App = () => {
   // --- Derived: investigation intel tracking ---
   const criticalNodes = currentMission?.intel.filter(n => n.critical) ?? [];
   const criticalViewed = criticalNodes.filter(n => viewedIntel.has(n.id)).length;
-  const canProceedToChallenge = criticalViewed >= criticalNodes.length && criticalNodes.length > 0;
+  const canProceedToChallenge = criticalNodes.length === 0 || criticalViewed >= criticalNodes.length;
 
   // --- Persistence ---
   useEffect(() => { saveGame(gameState); }, [gameState]);
