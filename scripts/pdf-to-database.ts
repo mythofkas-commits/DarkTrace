@@ -15,6 +15,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { PDFDocument } from 'pdf-lib';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -84,6 +85,18 @@ interface ExtractedQuestion {
   page?: number;
 }
 
+const OCR_FAILURE_PATTERNS = [
+  'blank page',
+  'blank pages',
+  'blank white',
+  'no text',
+  'no visible text',
+  'do not contain any text',
+  'nothing to transcribe',
+  'unable to transcribe',
+  'please provide',
+];
+
 // --- HELPERS ---
 function normalizeDomain(raw: string): string {
   const lower = raw.toLowerCase();
@@ -134,6 +147,30 @@ function salvageJson(raw: string): ExtractedQuestion[] {
   const firstBracket = raw.indexOf('[');
   if (firstBracket === -1) return [];
   try { return JSON.parse(raw.slice(firstBracket, lastBrace + 1) + ']'); } catch { return []; }
+}
+
+function isLikelyOcrFailure(text: string): boolean {
+  const lower = text.toLowerCase();
+  return OCR_FAILURE_PATTERNS.some(p => lower.includes(p));
+}
+
+function hasExamQuestionSignal(text: string): boolean {
+  return /\b\d{1,3}\.\s/.test(text) || /\bquestion\s+\d{1,3}\b/i.test(text);
+}
+
+function inspectPdfBinary(pdfPath: string): {
+  replacementTriplets: number;
+  sha256: string;
+} {
+  const buf = fs.readFileSync(pdfPath);
+  let replacementTriplets = 0;
+  for (let i = 0; i < buf.length - 2; i++) {
+    if (buf[i] === 0xef && buf[i + 1] === 0xbf && buf[i + 2] === 0xbd) {
+      replacementTriplets++;
+    }
+  }
+  const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+  return { replacementTriplets, sha256 };
 }
 
 // ============================================================
@@ -190,10 +227,12 @@ async function ocrChunks(chunkFiles: Map<string, string>): Promise<string> {
 
   if (fs.existsSync(cacheFile)) {
     const cached = fs.readFileSync(cacheFile, 'utf-8');
-    if (cached.length > 5000) {
+    const hasAllSections = EXAM_CHUNKS.every(c => cached.includes(`=== ${c.label.toUpperCase()} ===`));
+    if (cached.length > 5000 && hasAllSections && !isLikelyOcrFailure(cached)) {
       console.log(`   📂 Using cached OCR (${(cached.length / 1024).toFixed(0)} KB)`);
       return cached;
     }
+    console.log('Cache invalid/stale, re-running OCR');
   }
 
   const model = genAI.getGenerativeModel(
@@ -251,7 +290,11 @@ Output plain text. Be thorough — do not skip any answer.`;
           { fileData: { mimeType: uploadMime, fileUri: uploadUri } },
           { text: ocrPrompt }
         ]);
-        text = result.response.text();
+        const candidate = result.response.text();
+        if (isLikelyOcrFailure(candidate) || !hasExamQuestionSignal(candidate)) {
+          throw new Error('OCR returned no usable question/answer content');
+        }
+        text = candidate;
         break;
       } catch (err: any) {
         const msg = err.message || String(err);
@@ -270,6 +313,10 @@ Output plain text. Be thorough — do not skip any answer.`;
     await new Promise(r => setTimeout(r, 3000));
   }
 
+  if (isLikelyOcrFailure(fullText) || fullText.length < 20000) {
+    throw new Error('OCR content is incomplete or mostly unreadable; refusing to continue to Phase 2.');
+  }
+
   fs.writeFileSync(cacheFile, fullText, 'utf-8');
   console.log(`   💾 Cached OCR: ${(fullText.length / 1024).toFixed(0)} KB`);
   return fullText;
@@ -282,7 +329,10 @@ async function structureBatch(
   rawText: string, examLabel: string, startQ: number, endQ: number, retryCount = 0
 ): Promise<ExtractedQuestion[]> {
   const model = genAI.getGenerativeModel(
-    { model: FLASH_MODEL, generationConfig: { maxOutputTokens: 65536, temperature: 0.1 } },
+    {
+      model: FLASH_MODEL,
+      generationConfig: { maxOutputTokens: 65536, temperature: 0.1, responseMimeType: 'application/json' }
+    },
     REQUEST_TIMEOUT
   );
 
@@ -330,12 +380,12 @@ ${rawText}`;
     } catch {
       const salvaged = salvageJson(jsonStr);
       if (salvaged.length > 0) { console.log(`      🔧 Salvaged ${salvaged.length}`); return salvaged; }
-      if (retryCount === 0 && endQ - startQ > 3) {
+      if (retryCount < 2 && endQ - startQ > 1) {
         const mid = Math.floor((startQ + endQ) / 2);
         console.log(`      🔄 Splitting Q${startQ}-${mid} + Q${mid+1}-${endQ}`);
-        const a = await structureBatch(rawText, examLabel, startQ, mid, 1);
+        const a = await structureBatch(rawText, examLabel, startQ, mid, retryCount + 1);
         await new Promise(r => setTimeout(r, 2000));
-        const b = await structureBatch(rawText, examLabel, mid + 1, endQ, 1);
+        const b = await structureBatch(rawText, examLabel, mid + 1, endQ, retryCount + 1);
         return [...a, ...b];
       }
       return [];
@@ -372,6 +422,16 @@ async function uploadToFirestore(questions: ExtractedQuestion[]) {
 async function main() {
   const pdfPath = path.join(__dirname, '..', 'SY0-701 Practice Exams.pdf');
   if (!fs.existsSync(pdfPath)) { console.error('❌ PDF not found:', pdfPath); process.exit(1); }
+
+  const pdfInfo = inspectPdfBinary(pdfPath);
+  if (pdfInfo.replacementTriplets > 1000) {
+    console.error('âŒ PDF appears corrupted before OCR.');
+    console.error(`   Detected UTF-8 replacement byte triplets: ${pdfInfo.replacementTriplets}`);
+    console.error(`   SHA-256: ${pdfInfo.sha256}`);
+    console.error('   This usually means the PDF binary was transcoded as text (ef bf bd bytes inserted).');
+    console.error('   Replace "SY0-701 Practice Exams.pdf" with a clean original binary copy, then rerun.');
+    process.exit(1);
+  }
 
   const sizeMB = (fs.statSync(pdfPath).size / 1024 / 1024).toFixed(1);
   console.log(`📋 PDF: SY0-701 Practice Exams.pdf (${sizeMB} MB, 393 pages)`);
