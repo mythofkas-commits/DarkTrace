@@ -259,9 +259,20 @@ const App = () => {
 
       setGameState(prev => {
         const investigateXp = 75;
-        const newXp = prev.xp + investigateXp;
+        const hasCleared = prev.clearedMissions.includes(currentMission.id);
+        const xpGain = hasCleared ? 0 : investigateXp;
+        const newXp = prev.xp + xpGain;
         const newLevel = Math.floor(newXp / 1000) + 1;
-        return { ...prev, xp: newXp, streak: 0, level: newLevel };
+        const newClearedMissions = hasCleared
+          ? prev.clearedMissions
+          : [...prev.clearedMissions, currentMission.id];
+        return {
+          ...prev,
+          xp: newXp,
+          streak: 0,
+          level: newLevel,
+          clearedMissions: newClearedMissions,
+        };
       });
     }
 
