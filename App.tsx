@@ -116,15 +116,6 @@ const App = () => {
   const criticalViewed = criticalNodes.filter(n => viewedIntel.has(n.id)).length;
   const canProceedToChallenge = criticalNodes.length === 0 || criticalViewed >= criticalNodes.length;
 
-  // --- Reset stale mission state on load ---
-  // If page reloads while a mission was active, missionPhase resets to 'select'
-  // but currentMissionId persists in localStorage, causing a blank screen.
-  useEffect(() => {
-    if (missionPhase === 'select' && gameState.currentMissionId) {
-      setGameState(prev => ({ ...prev, currentMissionId: null }));
-    }
-  }, [missionPhase, gameState.currentMissionId, gameState.mode]);
-
   // --- Persistence ---
   useEffect(() => { saveGame(gameState); }, [gameState]);
 
@@ -146,8 +137,8 @@ const App = () => {
                     addLog('[CLOUD] Syncing remote profile...');
                     return {
                       ...cloudData,
-                      currentScenarioId: prev.currentScenarioId || cloudData.currentScenarioId,
-                      currentMissionId: prev.currentMissionId || cloudData.currentMissionId,
+                      currentScenarioId: null,
+                      currentMissionId: null,
                       clearedMissions: cloudData.clearedMissions ?? prev.clearedMissions ?? [],
                       mode: prev.mode,
                     };
@@ -470,7 +461,7 @@ const App = () => {
               {gameState.mode === 'investigate' && (
                 <>
                   {/* Mission Select */}
-                  {missionPhase === 'select' && !currentMission && (
+                  {missionPhase === 'select' && (
                     <div className="flex-1 flex flex-col p-6">
                       <SignalSearch searchTerm={searchTerm} setSearchTerm={setSearchTerm} resultCount={availableMissions.length} />
                       <div className="flex-1 overflow-y-auto pr-2 space-y-2">
