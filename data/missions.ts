@@ -3838,7 +3838,7 @@ The lesson: Data at rest MUST be encrypted. Cloud storage MUST have access contr
     id: 'MISSION-022',
     title: 'The Untested Plan',
     domain: 'Security Architecture',
-    objectiveCoes: ['3.4'],
+    objectiveCodes: ['3.4'],
     threatLevel: 'critical',
     tags: ['Disaster Recovery', 'Business Continuity', 'Backups', 'High Availability', 'Resilience'],
     briefing: `DISASTER SCENARIO: At 02:14 UTC, ransomware encrypted every server in your primary data center — 140 production systems offline. The attackers deleted local backups and Volume Shadow Copies. Your disaster recovery (DR) plan says: "In the event of primary site failure, fail over to the warm site in Denver." The operations team initiated the DR plan. Nine hours later, they\'re still trying to bring systems online. Backups are corrupted. The warm site hasn\'t been tested in 18 months. The CEO is demanding answers: why do we have a DR plan that doesn\'t work?`,
