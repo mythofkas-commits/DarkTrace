@@ -123,7 +123,7 @@ const App = () => {
     if (missionPhase === 'select' && gameState.currentMissionId) {
       setGameState(prev => ({ ...prev, currentMissionId: null }));
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [missionPhase, gameState.currentMissionId, gameState.mode]);
 
   // --- Persistence ---
   useEffect(() => { saveGame(gameState); }, [gameState]);
