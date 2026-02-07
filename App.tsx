@@ -22,7 +22,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 type MissionPhase = 'select' | 'briefing' | 'investigating' | 'challenge' | 'debrief';
 
 const App = () => {
-  const [gameState, setGameState] = useState<GameState>(loadGame());
+  const [gameState, setGameState] = useState<GameState>(() => {
+    const saved = loadGame();
+    // missionPhase always starts as 'select', so clear any stale currentMissionId
+    // to avoid a blank panel flash before useEffect could clean it up.
+    return { ...saved, currentMissionId: null };
+  });
   const [logs, setLogs] = useState<string[]>(['Initializing DarkTrace...', 'Loading Knowledge Base... OK', 'Waiting for command...']);
   const [searchTerm, setSearchTerm] = useState('');
   const [user, setUser] = useState<any>(null);
@@ -115,15 +120,6 @@ const App = () => {
   const criticalNodes = currentMission?.intel.filter(n => n.critical) ?? [];
   const criticalViewed = criticalNodes.filter(n => viewedIntel.has(n.id)).length;
   const canProceedToChallenge = criticalNodes.length === 0 || criticalViewed >= criticalNodes.length;
-
-  // --- Reset stale mission state on load ---
-  // If page reloads while a mission was active, missionPhase resets to 'select'
-  // but currentMissionId persists in localStorage, causing a blank screen.
-  useEffect(() => {
-    if (missionPhase === 'select' && gameState.currentMissionId) {
-      setGameState(prev => ({ ...prev, currentMissionId: null }));
-    }
-  }, [missionPhase, gameState.currentMissionId, gameState.mode]);
 
   // --- Persistence ---
   useEffect(() => { saveGame(gameState); }, [gameState]);
