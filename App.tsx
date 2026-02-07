@@ -8,6 +8,7 @@ import { SignalSearch } from './components/SignalSearch';
 import { MissionBriefing } from './components/MissionBriefing';
 import { IntelExplorer } from './components/IntelExplorer';
 import { saveGame, loadGame } from './utils/storage';
+import { getNextMission } from './utils/missionSelector';
 import { auth, db } from './utils/firebase';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, getDocs } from 'firebase/firestore';
@@ -94,6 +95,25 @@ const App = () => {
       return !isCleared && matchesDomain && matchesSearch;
     });
   }, [missions, gameState.clearedMissions, gameState.activeDomain, searchTerm]);
+
+  const nextMissionSelection = useMemo(() => {
+    return getNextMission(missions, gameState.clearedMissions);
+  }, [missions, gameState.clearedMissions]);
+
+  const nextMissionReason = (() => {
+    switch (nextMissionSelection.reason) {
+      case 'review':
+        return 'Review checkpoint triggered after recent completions.';
+      case 'prerequisite':
+        return nextMissionSelection.detail
+          ? `Prerequisite required: ${nextMissionSelection.detail}.`
+          : 'Prerequisite required before continuing.';
+      case 'sequence':
+        return 'Next mission in sequence.';
+      default:
+        return '';
+    }
+  })();
 
   // --- Derived: available scenarios (test mode) ---
   const availableScenarios = useMemo(() => {
@@ -469,6 +489,23 @@ const App = () => {
                   {missionPhase === 'select' && (
                     <div className="flex-1 flex flex-col p-6">
                       <SignalSearch searchTerm={searchTerm} setSearchTerm={setSearchTerm} resultCount={availableMissions.length} />
+                      {nextMissionSelection.mission && (
+                        <div className="bg-cyber-dark/60 rounded-lg border border-cyber-slate/50 p-4 mb-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-[10px] text-cyber-cyan tracking-widest">NEXT MISSION RECOMMENDATION</p>
+                              <p className="text-sm text-white font-bold">{nextMissionSelection.mission.title}</p>
+                              <p className="text-[10px] text-gray-500 mt-1">{nextMissionReason}</p>
+                            </div>
+                            <button
+                              onClick={() => startMission(nextMissionSelection.mission!.id)}
+                              className="bg-cyber-amber/20 hover:bg-cyber-amber/30 text-cyber-amber text-xs font-bold px-3 py-2 rounded border border-cyber-amber/30 transition-all"
+                            >
+                              START NEXT
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       <div className="flex-1 overflow-y-auto pr-2 space-y-2">
                         {availableMissions.length === 0 ? (
                           <div className="flex flex-col items-center justify-center h-full text-gray-500">
@@ -654,12 +691,23 @@ const App = () => {
                           </button>
                         )}
                         <button
-                          onClick={exitMission}
+                          onClick={() => {
+                            if (challengeResult === 'correct' && nextMissionSelection.mission) {
+                              startMission(nextMissionSelection.mission.id);
+                              return;
+                            }
+                            exitMission();
+                          }}
                           className="flex-1 bg-cyber-slate hover:bg-cyber-slate/80 text-white font-bold py-3 rounded transition-all"
                         >
                           {challengeResult === 'correct' ? 'NEXT MISSION' : 'RETURN TO MISSIONS'}
                         </button>
                       </div>
+                      {challengeResult === 'correct' && nextMissionSelection.mission && (
+                        <p className="mt-3 text-[10px] text-gray-500">
+                          {nextMissionReason}
+                        </p>
+                      )}
                     </motion.div>
                   )}
                 </>

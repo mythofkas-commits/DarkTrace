@@ -46,6 +46,7 @@ export interface Mission {
   objectiveCodes: string[];
   threatLevel: 'low' | 'medium' | 'high' | 'critical';
   tags: string[];
+  prerequisites?: string[];
   briefing: string;
   intel: IntelNode[];
   challenge: {

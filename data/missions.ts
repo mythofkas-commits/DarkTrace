@@ -91,6 +91,7 @@ export const missions: Mission[] = [
     objectiveCodes: ['2.4'],
     threatLevel: 'critical',
     tags: ['DNS', 'Network Attacks', 'Spoofing', 'Cache Poisoning'],
+    prerequisites: ['MISSION-001'],
     briefing: 'CRITICAL ALERT: First National Bank\'s online portal has experienced a 40% drop in legitimate traffic over the past 3 hours. The help desk is flooded — customers are calling to report that the banking site "looks slightly different" and asked them to re-enter their full credentials, SSN, and card numbers. Some customers say their browser showed a certificate warning they clicked through. Your SOC team needs you to investigate immediately.',
 
     intel: [
@@ -169,6 +170,7 @@ export const missions: Mission[] = [
     objectiveCodes: ['3.1'],
     threatLevel: 'high',
     tags: ['Cloud', 'Hybrid', 'Architecture', 'Segmentation'],
+    prerequisites: ['MISSION-002'],
     briefing: 'SECURITY AUDIT FINDINGS: Your company migrated 40% of workloads to AWS six months ago while keeping financial systems on-premises. A third-party security audit just landed on your desk flagged "HIGH RISK" — they found multiple gaps where security policies between the two environments don\'t align. The CTO wants your assessment before the board meeting tomorrow morning.',
 
     intel: [
