@@ -66,7 +66,8 @@ const App = () => {
       }
     };
     fetchScenarios();
-  }, [gameState.mode, addLog]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.mode]);
 
   // --- Derived: current mission ---
   const currentMission: Mission | undefined = useMemo(() => {
