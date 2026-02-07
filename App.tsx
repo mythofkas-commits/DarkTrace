@@ -116,6 +116,15 @@ const App = () => {
   const criticalViewed = criticalNodes.filter(n => viewedIntel.has(n.id)).length;
   const canProceedToChallenge = criticalNodes.length === 0 || criticalViewed >= criticalNodes.length;
 
+  // --- Reset stale mission state on load ---
+  // If page reloads while a mission was active, missionPhase resets to 'select'
+  // but currentMissionId persists in localStorage, causing a blank screen.
+  useEffect(() => {
+    if (missionPhase === 'select' && gameState.currentMissionId) {
+      setGameState(prev => ({ ...prev, currentMissionId: null }));
+    }
+  }, [missionPhase, gameState.currentMissionId, gameState.mode]);
+
   // --- Persistence ---
   useEffect(() => { saveGame(gameState); }, [gameState]);
 
