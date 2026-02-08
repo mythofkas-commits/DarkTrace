@@ -452,7 +452,7 @@ const App = () => {
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
-              <div className="text-[10px] text-gray-600 mt-1">
+              <div className="text-[10px] text-gray-400 mt-1">
                 {clearedItems} / {totalItems} {gameState.mode === 'investigate' ? 'missions' : 'scenarios'}
               </div>
             </div>
@@ -498,10 +498,10 @@ const App = () => {
                                 }`}>{m.threatLevel.toUpperCase()}</span>
                               </div>
                               <div className="text-white text-sm font-bold mb-1 group-hover:text-cyber-amber transition-colors">{m.title}</div>
-                              <div className="text-gray-400 text-xs line-clamp-2">{m.briefing}</div>
+                              <div className="text-gray-300 text-xs line-clamp-2">{m.briefing}</div>
                               <div className="flex gap-2 mt-2">
                                 {m.tags.slice(0, 3).map(tag => (
-                                  <span key={tag} className="text-[10px] text-gray-500 bg-cyber-black/50 px-1 rounded">#{tag}</span>
+                                  <span key={tag} className="text-[10px] text-gray-400 bg-cyber-black/50 px-1 rounded">#{tag}</span>
                                 ))}
                               </div>
                             </div>
@@ -545,7 +545,7 @@ const App = () => {
                             className={`w-full text-left p-4 rounded border transition-all duration-200 ${
                               challengeOption === idx
                                 ? 'bg-cyber-slate border-cyber-cyan text-cyber-cyan'
-                                : 'bg-cyber-dark/50 border-cyber-slate/50 hover:border-gray-500 text-gray-300'
+                                : 'bg-cyber-dark/50 border-cyber-slate/50 hover:border-gray-500 text-gray-200'
                             }`}
                           >
                             <div className="flex items-center gap-3">
@@ -597,14 +597,14 @@ const App = () => {
                             <div className={`p-3 rounded border text-sm ${
                               idx === currentMission.challenge.correctIndex ? 'bg-cyber-emerald/10 border-cyber-emerald/30 text-cyber-emerald' :
                               idx === challengeOption && challengeOption !== currentMission.challenge.correctIndex ? 'bg-cyber-rose/10 border-cyber-rose/30 text-cyber-rose' :
-                              'bg-cyber-dark/30 border-cyber-slate/30 text-gray-500'
+                              'bg-cyber-dark/30 border-cyber-slate/30 text-gray-400'
                             }`}>
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-xs">{String.fromCharCode(65 + idx)}.</span>
                                 <span>{opt}</span>
                               </div>
                             </div>
-                            <p className={`text-xs pl-6 ${idx === currentMission.challenge.correctIndex ? 'text-cyber-emerald/70' : 'text-gray-600'}`}>
+                            <p className={`text-xs pl-6 ${idx === currentMission.challenge.correctIndex ? 'text-cyber-emerald/80' : 'text-gray-400'}`}>
                               {currentMission.challenge.rationales[idx]}
                             </p>
                           </div>
@@ -617,7 +617,7 @@ const App = () => {
                           <h4 className="text-cyber-rose font-bold text-sm mb-2 flex items-center gap-2">
                             <AlertTriangle className="w-4 h-4" /> ESCALATION
                           </h4>
-                          <p className="text-sm text-gray-300 leading-relaxed">{currentMission.escalation}</p>
+                          <p className="text-sm text-gray-200 leading-relaxed">{currentMission.escalation}</p>
                         </div>
                       )}
 
@@ -626,7 +626,7 @@ const App = () => {
                         <h4 className="text-cyber-cyan font-bold text-sm mb-2 flex items-center gap-2">
                           <BookOpen className="w-4 h-4" /> DEBRIEF
                         </h4>
-                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{currentMission.debrief}</p>
+                        <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{currentMission.debrief}</p>
                       </div>
 
                       {/* References */}
@@ -771,7 +771,7 @@ const App = () => {
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: 'auto' }}
                                   className={`text-xs pl-11 pr-4 py-2 border-l-2 ${
-                                    idx === currentScenario.correctIndex ? 'border-cyber-emerald text-cyber-emerald/80' : 'border-cyber-slate text-gray-500'
+                                    idx === currentScenario.correctIndex ? 'border-cyber-emerald text-cyber-emerald/80' : 'border-cyber-slate text-gray-400'
                                   }`}
                                 >{currentScenario.rationales[idx]}</motion.div>
                               )}
@@ -810,7 +810,7 @@ const App = () => {
                             <div className="mt-4 bg-cyber-dark p-4 rounded border-l-4 border-cyber-cyan space-y-4">
                               <div>
                                 <h4 className="text-cyber-cyan font-bold text-sm mb-1 flex items-center gap-2"><BookOpen className="w-4 h-4" /> ANALYSIS</h4>
-                                <p className="text-sm text-gray-300 leading-relaxed">{currentScenario.explanation}</p>
+                                <p className="text-sm text-gray-200 leading-relaxed">{currentScenario.explanation}</p>
                               </div>
                               <div className="flex gap-2">
                                 {currentScenario.refs.map((ref, i) => (

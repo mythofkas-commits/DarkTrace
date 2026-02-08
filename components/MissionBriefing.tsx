@@ -35,7 +35,7 @@ export const MissionBriefing: React.FC<MissionBriefingProps> = ({ mission, onBeg
       <h2 className="text-2xl font-bold text-white mb-1 tracking-tight">
         {mission.title}
       </h2>
-      <span className="text-xs text-gray-500 mb-6">{mission.domain}</span>
+      <span className="text-xs text-gray-400 mb-6">{mission.domain}</span>
 
       {/* Briefing content */}
       <div className="bg-cyber-dark/80 rounded-lg border border-cyber-amber/30 p-6 mb-6">
@@ -43,7 +43,7 @@ export const MissionBriefing: React.FC<MissionBriefingProps> = ({ mission, onBeg
           <AlertTriangle className="w-5 h-5 text-cyber-amber" />
           <h3 className="text-cyber-amber font-bold text-sm tracking-wider">INCIDENT BRIEFING</h3>
         </div>
-        <p className="text-gray-300 leading-relaxed text-sm">
+        <p className="text-gray-200 leading-relaxed text-sm">
           {mission.briefing}
         </p>
       </div>
@@ -61,14 +61,14 @@ export const MissionBriefing: React.FC<MissionBriefingProps> = ({ mission, onBeg
               className="bg-cyber-dark/50 rounded p-2 border border-cyber-slate/30 flex items-center gap-2"
             >
               <div className={`w-2 h-2 rounded-full ${node.critical ? 'bg-cyber-amber' : 'bg-gray-600'}`} />
-              <span className="text-xs text-gray-400">{node.label}</span>
+              <span className="text-xs text-gray-300">{node.label}</span>
               {node.critical && (
                 <span className="text-[9px] text-cyber-amber bg-cyber-amber/10 px-1 rounded ml-auto">KEY</span>
               )}
             </div>
           ))}
         </div>
-        <p className="text-[10px] text-gray-600 mt-2">
+        <p className="text-[10px] text-gray-400 mt-2">
           Review intelligence marked KEY before responding to the incident
         </p>
       </div>
@@ -76,7 +76,7 @@ export const MissionBriefing: React.FC<MissionBriefingProps> = ({ mission, onBeg
       {/* Tags */}
       <div className="flex gap-2 mb-6">
         {mission.tags.map(tag => (
-          <span key={tag} className="text-[10px] text-gray-500 bg-cyber-black/50 px-2 py-0.5 rounded">
+          <span key={tag} className="text-[10px] text-gray-400 bg-cyber-black/50 px-2 py-0.5 rounded">
             #{tag}
           </span>
         ))}

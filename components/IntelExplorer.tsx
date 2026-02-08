@@ -54,7 +54,7 @@ export const IntelExplorer: React.FC<IntelExplorerProps> = ({
       <div className="bg-cyber-dark/80 rounded p-3 border border-cyber-slate/50">
         <div className="flex justify-between items-center mb-2">
           <span className="text-xs font-bold text-cyber-cyan tracking-wider">INVESTIGATION PROGRESS</span>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-300">
             {criticalViewed}/{criticalCount} key intel reviewed
           </span>
         </div>
@@ -84,8 +84,8 @@ export const IntelExplorer: React.FC<IntelExplorerProps> = ({
                   isActive
                     ? 'bg-cyber-cyan/10 border-cyber-cyan/50 text-cyber-cyan'
                     : isViewed
-                    ? 'bg-cyber-slate/20 border-cyber-slate/30 text-gray-400'
-                    : 'bg-cyber-dark/80 border-cyber-slate/40 text-gray-300 hover:border-gray-500'
+                    ? 'bg-cyber-slate/20 border-cyber-slate/30 text-gray-300'
+                    : 'bg-cyber-dark/80 border-cyber-slate/40 text-gray-200 hover:border-gray-500'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-1">
@@ -111,7 +111,7 @@ export const IntelExplorer: React.FC<IntelExplorerProps> = ({
         </div>
 
         {/* Intel detail (right) */}
-        <div className="flex-1 bg-cyber-dark/60 rounded-lg border border-cyber-slate/40 overflow-hidden flex flex-col min-h-0">
+        <div className="flex-1 bg-cyber-slate/15 rounded-lg border border-cyber-slate/40 overflow-hidden flex flex-col min-h-0">
           <AnimatePresence mode="wait">
             {activeNode ? (
               <motion.div
@@ -135,7 +135,7 @@ export const IntelExplorer: React.FC<IntelExplorerProps> = ({
 
                 {/* Detail content */}
                 <div className="flex-1 overflow-y-auto p-4">
-                  <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-mono">
+                  <div className="text-sm text-gray-200 leading-[1.75] whitespace-pre-wrap font-mono">
                     {activeNode.content}
                   </div>
                 </div>
@@ -145,12 +145,12 @@ export const IntelExplorer: React.FC<IntelExplorerProps> = ({
                 key="empty"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex-1 flex items-center justify-center text-gray-600"
+                className="flex-1 flex items-center justify-center text-gray-500"
               >
                 <div className="text-center">
                   <Lock className="w-10 h-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">Select an intelligence file to review</p>
-                  <p className="text-xs mt-1 text-gray-700">
+                  <p className="text-xs mt-1 text-gray-500">
                     Review all KEY evidence before responding
                   </p>
                 </div>
